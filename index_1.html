@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataforma de Evaluaciones Antropométricas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#101826;
+    --slate:#3b4759;
+    --mist:#8b96a8;
+    --line:#dfe3ea;
+    --paper:#f5f6f8;
+    --card:#ffffff;
+    --track:#0f2a2e;   /* deep pine, sidebar */
+    --track-2:#15393e;
+    --signal:#0d9488;  /* teal — "active/measured" */
+    --signal-dim:#ccebe8;
+    --amber:#c47f17;   /* pending / not-yet-measured */
+    --danger:#b3432f;
+    --font-display:'Fraunces', serif;
+    --font-body:'Inter', sans-serif;
+    --font-data:'Roboto Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--font-body); font-size:14px; line-height:1.4;
+  }
+  .app{ display:flex; min-height:100vh; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar{
+    width:230px; flex-shrink:0;
+    background:linear-gradient(180deg,var(--track),var(--track-2));
+    color:#dce8e6; padding:26px 18px; display:flex; flex-direction:column; gap:28px;
+  }
+  .brand{ font-family:var(--font-display); font-size:19px; font-weight:600; color:#fff; letter-spacing:.2px; }
+  .brand small{ display:block; font-family:var(--font-body); font-size:10.5px; letter-spacing:1.5px; color:#7fb3ac; text-transform:uppercase; margin-top:4px; font-weight:600;}
+  nav.main-nav{ display:flex; flex-direction:column; gap:4px; }
+  nav.main-nav button{
+    all:unset; cursor:pointer; padding:10px 12px; border-radius:8px;
+    font-size:13.5px; font-weight:500; color:#b9c9c6; display:flex; align-items:center; gap:10px;
+  }
+  nav.main-nav button .dot{ width:6px;height:6px;border-radius:50%; background:#4d6864; flex-shrink:0; }
+  nav.main-nav button:hover{ background:rgba(255,255,255,0.06); color:#fff; }
+  nav.main-nav button.active{ background:var(--signal); color:#03211e; font-weight:700; }
+  nav.main-nav button.active .dot{ background:#03211e; }
+
+  .sidebar-foot{ margin-top:auto; font-size:11.5px; color:#5f7d78; line-height:1.6; }
+
+  /* ===== MAIN ===== */
+  main{ flex:1; padding:30px 40px 60px; max-width:980px; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+  .view-head{ margin-bottom:22px; }
+  .view-head h1{ font-family:var(--font-display); font-weight:600; font-size:26px; margin:0 0 4px; }
+  .view-head p{ margin:0; color:var(--mist); font-size:13.5px; }
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px 26px; margin-bottom:20px; }
+  .card h2{ font-size:14px; font-weight:700; margin:0 0 16px; letter-spacing:.2px; }
+
+  .field-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px 18px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11.5px; font-weight:600; color:var(--slate); text-transform:uppercase; letter-spacing:.3px; }
+  .field input, .field select{
+    font-family:var(--font-body); font-size:13.5px; padding:8px 10px;
+    border:1px solid var(--line); border-radius:7px; background:#fcfcfd; color:var(--ink);
+  }
+  .field input:focus, .field select:focus{ outline:2px solid var(--signal); outline-offset:1px; border-color:var(--signal); }
+
+  .btn{
+    all:unset; cursor:pointer; font-family:var(--font-body); font-weight:600; font-size:13px;
+    padding:10px 18px; border-radius:8px; text-align:center;
+  }
+  .btn-primary{ background:var(--signal); color:#04241f; }
+  .btn-primary:hover{ background:#0b7d73; }
+  .btn-ghost{ background:transparent; color:var(--slate); border:1px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--mist); }
+  .btn-row{ display:flex; gap:10px; margin-top:18px; justify-content:flex-end; }
+
+  table.list{ width:100%; border-collapse:collapse; font-size:13px; }
+  table.list th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--mist); padding:8px 10px; border-bottom:1px solid var(--line); }
+  table.list td{ padding:10px; border-bottom:1px solid #eef0f3; }
+  table.list tr:last-child td{ border-bottom:none; }
+  table.list .chip{ font-family:var(--font-data); font-size:11px; background:var(--signal-dim); color:#075c53; padding:2px 8px; border-radius:20px; }
+  table.list .link-btn{ all:unset; cursor:pointer; color:var(--signal); font-weight:600; font-size:12.5px; }
+  .empty{ color:var(--mist); font-size:13px; padding:14px 0; }
+
+  /* ===== TABS (solapas) ===== */
+  .tabbar{ display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:22px; overflow-x:auto; }
+  .tabbar button{
+    all:unset; cursor:pointer; padding:11px 16px; font-size:13px; font-weight:600; color:var(--mist);
+    border-bottom:2.5px solid transparent; white-space:nowrap; display:flex; align-items:center; gap:7px;
+  }
+  .tabbar button:hover{ color:var(--slate); }
+  .tabbar button.active{ color:var(--ink); border-bottom-color:var(--signal); }
+  .tabbar .count{ font-family:var(--font-data); font-size:10.5px; background:var(--paper); border:1px solid var(--line); padding:1px 6px; border-radius:20px; color:var(--mist); }
+  .tabbar button.active .count{ background:var(--signal-dim); color:#075c53; border-color:transparent; }
+
+  .tabpanel{ display:none; }
+  .tabpanel.active{ display:block; }
+
+  .measure-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px 16px; }
+  .measure-field{ display:flex; flex-direction:column; gap:4px; }
+  .measure-field label{ font-size:11.5px; color:var(--slate); }
+  .measure-field .unit{ color:var(--mist); font-weight:400; }
+  .measure-field input{
+    font-family:var(--font-data); font-size:14px; padding:8px 9px;
+    border:1px solid var(--line); border-radius:7px; background:#fcfcfd;
+  }
+  .measure-field input:focus{ outline:2px solid var(--signal); outline-offset:1px; border-color:var(--signal); }
+  .measure-field input.filled{ border-color:#a9d8d3; background:#f4fbfa; }
+
+  select#eval-atleta{ width:100%; max-width:420px; }
+
+  .not-selected-notice{ background:#fbf3e7; border:1px solid #ecd9b9; color:#7a5411; padding:12px 16px; border-radius:9px; font-size:13px; margin-bottom:18px; }
+
+  .toast{
+    position:fixed; bottom:24px; right:24px; background:var(--ink); color:#fff; padding:13px 20px;
+    border-radius:9px; font-size:13.5px; font-weight:500; box-shadow:0 6px 20px rgba(0,0,0,0.25);
+    opacity:0; transform:translateY(10px); transition:all .25s ease; pointer-events:none; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  /* ===== INFORMES ===== */
+  .disclaimer{ background:#fbf3e7; border:1px solid #ecd9b9; color:#7a5411; padding:11px 15px; border-radius:9px; font-size:12.5px; margin-bottom:18px; }
+  .report-meta{ display:flex; gap:26px; font-size:12.5px; color:var(--slate); margin-bottom:18px; flex-wrap:wrap; }
+  .report-meta b{ color:var(--ink); }
+  table.report-table{ width:100%; border-collapse:collapse; margin-bottom:20px; }
+  table.report-table td{ padding:7px 8px; font-size:13px; border-bottom:1px solid #eef0f3; }
+  table.report-table td.rlabel{ width:32%; color:var(--slate); }
+  table.report-table td.rval{ width:15%; font-family:var(--font-data); font-weight:600; }
+  table.report-table td.rref{ width:16%; color:var(--signal); font-size:11.5px; font-family:var(--font-data); }
+  table.report-table tr.rtotal td{ border-top:1.5px solid var(--line); border-bottom:none; font-weight:700; padding-top:11px; }
+  .report-chart{ display:flex; align-items:center; gap:36px; margin:6px 0 22px; }
+  .report-pie{ width:170px; height:170px; border-radius:50%; flex-shrink:0; }
+  .report-legend div{ display:flex; align-items:center; gap:8px; font-size:12.5px; margin-bottom:7px; }
+  .report-legend .sw{ width:12px; height:12px; border-radius:3px; }
+
+  /* ===== EVOLUTIVO ===== */
+  .evo-toggle{ display:flex; gap:8px; margin-bottom:18px; }
+  .evo-toggle button{
+    all:unset; cursor:pointer; padding:7px 14px; font-size:12.5px; font-weight:600; color:var(--slate);
+    border:1px solid var(--line); border-radius:20px;
+  }
+  .evo-toggle button.active{ background:var(--signal); color:#04241f; border-color:var(--signal); }
+  .evo-empty{ color:var(--mist); font-size:13.5px; padding:20px 0; }
+  .evo-point-label{ font-family:var(--font-data); font-size:10.5px; fill:var(--slate); }
+
+  /* ===== HOJAS DE INFORME (4C / 5C) ===== */
+  .hoja{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:30px 34px; }
+  .hoja-header{ width:100%; border-collapse:collapse; margin-bottom:16px; }
+  .hoja-header td{ padding:2px 0; font-size:12px; color:#333; vertical-align:top; }
+  .hoja-header td:nth-child(3){ text-align:right; }
+  .hoja-header b{ color:#000; }
+  .hoja-title{ text-align:center; font-family:var(--font-display); font-weight:600; font-size:18px; margin:6px 0 2px; letter-spacing:.3px; }
+  .hoja-model{ text-align:center; font-size:13px; font-weight:700; color:#b3432f; text-decoration:underline; margin:0 0 16px; }
+  .hoja-desc{ font-size:11.5px; line-height:1.55; text-align:justify; color:#333; margin:0 0 20px; }
+  .hoja-footnote{ font-size:10.5px; font-style:italic; color:#555; line-height:1.55; border-top:1px solid #eee; padding-top:10px; text-align:justify; margin-top:6px; }
+
+  @media (max-width:900px){
+    .field-grid, .measure-grid{ grid-template-columns:repeat(2,1fr); }
+  }
+  @media (max-width:780px){
+    .app{ flex-direction:column; }
+    .sidebar{
+      width:100%; flex-direction:column; align-items:stretch; padding:16px 16px 10px; gap:12px;
+    }
+    .sidebar .brand{ text-align:center; }
+    nav.main-nav{ flex-direction:row; flex-wrap:wrap; justify-content:center; gap:6px; }
+    nav.main-nav button{ padding:8px 12px; }
+    .sidebar-foot{ display:none; }
+    main{ padding:22px 16px 50px; }
+    .report-chart, .chart-row{ flex-direction:column; align-items:center; }
+    .field-grid, .measure-grid{ grid-template-columns:1fr 1fr; }
+    table.list, table.report-table{ display:block; overflow-x:auto; white-space:nowrap; }
+  }
+  @media (max-width:520px){
+    .field-grid, .measure-grid{ grid-template-columns:1fr; }
+    .btn-row{ flex-wrap:wrap; }
+    .report-pie, .pie{ width:150px !important; height:150px !important; }
+  }
+
+  @media print{
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
+    body > *:not(#print-area){ display:none !important; }
+    #print-area{ display:block !important; background:#fff; }
+    #print-area .hoja{ border:none; padding:0; page-break-after:always; }
+    #print-area .card{ page-break-inside:avoid; }
+    #print-area svg{ break-inside:avoid; }
+    .btn-row{ display:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">Antropos<small>Evaluaciones antropométricas</small></div>
+    <nav class="main-nav">
+      <button class="nav-btn active" data-view="view-atletas"><span class="dot"></span>Alta de deportista</button>
+      <button class="nav-btn" data-view="view-evaluacion"><span class="dot"></span>Evaluación</button>
+      <button class="nav-btn" data-view="view-informes"><span class="dot"></span>Informes</button>
+      <button class="nav-btn" data-view="view-evolutivo"><span class="dot"></span>Evolutivo</button>
+      <button class="nav-btn" data-view="view-bigdata"><span class="dot"></span>Big data</button>
+    </nav>
+    <div class="sidebar-foot">Los datos de esta demo se guardan solo en esta pestaña del navegador (no hay backend conectado todavía).</div>
+  </aside>
+
+  <main>
+
+    <!-- ================= VISTA 1: ALTA DE DEPORTISTAS ================= -->
+    <section id="view-atletas" class="view active">
+      <div class="view-head">
+        <h1>Alta de deportistas</h1>
+        <p>Registrá un atleta nuevo o elegí uno existente para cargarle una evaluación.</p>
+      </div>
+
+      <div class="card">
+        <h2>Nuevo deportista</h2>
+        <div class="field-grid">
+          <div class="field"><label>Nombre</label><input id="f-nombre" type="text" placeholder="Belén"></div>
+          <div class="field"><label>Apellido</label><input id="f-apellido" type="text" placeholder="Serrano"></div>
+          <div class="field"><label>Documento</label><input id="f-documento" type="text" placeholder="40.123.456"></div>
+          <div class="field"><label>Deporte</label>
+            <select id="f-deporte">
+              <option>Pentathlón</option><option>Fútbol</option><option>Handball</option>
+              <option>Natación</option><option>Atletismo</option><option>Rugby</option><option>Otro</option>
+            </select>
+          </div>
+          <div class="field"><label>Sexo</label>
+            <select id="f-sexo"><option value="F">Femenino</option><option value="M">Masculino</option></select>
+          </div>
+          <div class="field"><label>Fecha de nacimiento</label><input id="f-fnac" type="date"></div>
+          <div class="field"><label>Lateralidad</label>
+            <select id="f-lateralidad"><option value="Diestro">Diestro</option><option value="Zurdo">Zurdo</option><option value="Ambidiestro">Ambidiestro</option></select>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-limpiar-atleta">Limpiar</button>
+          <button class="btn btn-primary" id="btn-guardar-atleta">Guardar deportista</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Deportistas registrados</h2>
+        <table class="list" id="tabla-atletas">
+          <thead><tr><th>Nombre</th><th>Deporte</th><th>Sexo</th><th>Lateralidad</th><th>Documento</th><th>Evaluaciones</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="atletas-empty">Todavía no cargaste ningún deportista.</div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA 2: INGRESO DE MEDICIONES ================= -->
+    <section id="view-evaluacion" class="view">
+      <div class="view-head">
+        <h1>Ingreso de mediciones</h1>
+        <p>Elegí el deportista y completá cada solapa. Los campos vacíos se guardan como "no medido", nunca como cero.</p>
+      </div>
+
+      <div class="card">
+        <div class="field" style="margin-bottom:4px;">
+          <label>Deportista</label>
+          <select id="eval-atleta"><option value="">— Seleccioná un deportista —</option></select>
+        </div>
+      </div>
+
+      <div id="eval-sin-atleta" class="not-selected-notice">Seleccioná un deportista arriba para empezar a cargar la evaluación.</div>
+
+      <div id="eval-form" style="display:none;">
+        <div class="tabbar" id="tabbar"></div>
+        <div id="tabpanels"></div>
+
+        <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-tab-prev">← Anterior</button>
+          <button class="btn btn-ghost" id="btn-tab-next">Siguiente →</button>
+          <button class="btn btn-primary" id="btn-guardar-evaluacion">Guardar evaluación</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= VISTA 3: INFORMES ================= -->
+    <section id="view-informes" class="view">
+      <div class="view-head">
+        <h1>Informes antropométricos</h1>
+        <p>Elegí un deportista y una evaluación para ver el fraccionamiento corporal.</p>
+      </div>
+
+      <div class="card">
+        <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="field"><label>Deportista</label><select id="inf-atleta"><option value="">— Seleccioná —</option></select></div>
+          <div class="field"><label>Evaluación</label><select id="inf-evaluacion" disabled><option value="">— Elegí un deportista primero —</option></select></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Impresión combinada</h2>
+        <div style="display:flex; gap:22px; align-items:center; flex-wrap:wrap; font-size:13.5px;">
+          <label style="display:flex; align-items:center; gap:7px;"><input type="checkbox" id="chk-4c" checked> 4 Componentes</label>
+          <label style="display:flex; align-items:center; gap:7px;"><input type="checkbox" id="chk-5c" checked> 5 Componentes</label>
+          <label style="display:flex; align-items:center; gap:7px;"><input type="checkbox" id="chk-evo"> Evolutivo</label>
+          <button class="btn btn-primary" id="btn-imprimir-todo">Imprimir selección</button>
+        </div>
+      </div>
+
+      <div id="inf-contenido"></div>
+    </section>
+    <section id="view-evolutivo" class="view">
+      <div class="view-head">
+        <h1>Evolutivo</h1>
+        <p>Progreso del deportista a través de sus evaluaciones registradas.</p>
+      </div>
+
+      <div class="card">
+        <div class="field"><label>Deportista</label><select id="evo-atleta"><option value="">— Seleccioná —</option></select></div>
+      </div>
+
+      <div id="evo-contenido"></div>
+    </section>
+
+    <!-- ================= VISTA 5: BIG DATA ================= -->
+    <section id="view-bigdata" class="view">
+      <div class="view-head">
+        <h1>Big data</h1>
+        <p>Cruce de variables entre todos los deportistas evaluados, con filtros por año y deporte.</p>
+      </div>
+
+      <div class="disclaimer">Datos de ejemplo (generados) para maquetar el módulo — se reemplazan por consultas reales a <code>resultados_calculados</code> cuando el backend esté conectado.</div>
+
+      <div class="card">
+        <div class="field-grid" style="grid-template-columns:repeat(4,1fr);">
+          <div class="field"><label>Año</label><select id="bd-anio"></select></div>
+          <div class="field"><label>Deporte</label><select id="bd-deporte"></select></div>
+          <div class="field"><label>Eje X</label><select id="bd-x"></select></div>
+          <div class="field"><label>Eje Y</label><select id="bd-y"></select></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 id="bd-titulo">Scatter</h2>
+        <div id="bd-chart"></div>
+        <div class="report-legend" id="bd-legend" style="display:flex; flex-wrap:wrap; gap:16px; margin-top:14px;"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="print-area" style="display:none;"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================== DATOS EN MEMORIA =====================
+let atletas = [];
+let evaluaciones = [];
+let atletaSeleccionadoId = null;
+let tabActual = 0;
+
+// ===================== DEFINICIÓN DE SOLAPAS Y VARIABLES =====================
+const SECCIONES = [
+  {
+    id: 'generales', nombre: 'Datos generales', tipo: 'generales'
+  },
+  {
+    id: 'basicas', nombre: 'Antropométricos', unidad:'cm / kg',
+    campos: ['Peso (kg)','Talla (cm)','Talla Sentada (cm)','Envergadura (cm)']
+  },
+  {
+    id: 'pliegues', nombre: 'Pliegues', unidad:'mm',
+    campos: ['Tricipital','Subescapular','Bicipital','Pectoral','Axilar Medio','Iliocrestal','Supraespinal','Abdominal','Muslo Anterior','Pierna Medial']
+  },
+  {
+    id: 'perimetros', nombre: 'Perímetros', unidad:'cm',
+    campos: ['Cefálico','Cuello','Torácico','Cintura','Umbilical','Glúteo','Muslo 1','Muslo Medial','Pierna','Tobillo','Brazo Relajado','Brazo Contraído','Antebrazo','Muñeca']
+  },
+  {
+    id: 'diametros', nombre: 'Diámetros', unidad:'cm',
+    campos: ['Biacromial','Transv. Tórax','A.P. Tórax','Biliocrestal','Bicond. Fémur','Biep. Húmero','Biestiloideo','Bimaleolar','Pie Longitudinal','Pie Transversal','Mano Transversal','Bideltoideo','Bitrocantérico']
+  },
+  {
+    id: 'alturas', nombre: 'Alturas', unidad:'cm',
+    campos: ['Acromial','Radial','Estiloidea','Dactiloidea','Ilioespinal','Trocantérica','Tibial Lateral','Maleolar Lateral','Maleolar Medial']
+  },
+  {
+    id: 'longitudes', nombre: 'Longitudes', unidad:'cm',
+    campos: ['Acrom.-Dactiloidea','Acrom.-Estiloidea','Acrom.-Radial','Radial-Estiloidea','Medioestil.-Dactil.','Talla-Talla Sentada','Talla-T.S.-Tibial Lat.','Trocant.-Tibial Lat.','Tib. Med.-Mal. Med.']
+  }
+];
+
+function slug(s){ return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
+// ===================== NAV PRINCIPAL =====================
+document.querySelectorAll('.nav-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById(btn.dataset.view).classList.add('active');
+  });
+});
+
+// ===================== ALTA DE ATLETAS =====================
+function renderAtletas(){
+  const tbody = document.querySelector('#tabla-atletas tbody');
+  const empty = document.getElementById('atletas-empty');
+  tbody.innerHTML = '';
+  const select = document.getElementById('eval-atleta');
+  select.innerHTML = '<option value="">— Seleccioná un deportista —</option>';
+
+  if(atletas.length === 0){ empty.style.display='block'; document.getElementById('tabla-atletas').style.display='none'; }
+  else { empty.style.display='none'; document.getElementById('tabla-atletas').style.display='table'; }
+
+  atletas.forEach(a=>{
+    const cantEval = evaluaciones.filter(e=>e.atletaId===a.id).length;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${a.apellido}, ${a.nombre}</b></td><td>${a.deporte}</td><td>${a.sexo==='F'?'Femenino':'Masculino'}</td><td>${a.lateralidad||'—'}</td><td>${a.documento||'—'}</td>
+      <td><span class="chip">${cantEval} evaluación${cantEval===1?'':'es'}</span></td>
+      <td><button class="link-btn" data-id="${a.id}">Cargar evaluación →</button></td>`;
+    tbody.appendChild(tr);
+    const opt = document.createElement('option');
+    opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre} — ${a.deporte}`;
+    select.appendChild(opt);
+  });
+
+  tbody.querySelectorAll('.link-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelector('[data-view="view-evaluacion"]').click();
+      document.getElementById('eval-atleta').value = b.dataset.id;
+      seleccionarAtleta(b.dataset.id);
+    });
+  });
+
+  if(typeof poblarSelectAtletas === 'function'){
+    poblarSelectAtletas('inf-atleta');
+    poblarSelectAtletas('evo-atleta');
+  }
+}
+
+document.getElementById('btn-guardar-atleta').addEventListener('click', ()=>{
+  const nombre = document.getElementById('f-nombre').value.trim();
+  const apellido = document.getElementById('f-apellido').value.trim();
+  if(!nombre || !apellido){ showToast('Nombre y apellido son obligatorios'); return; }
+  atletas.push({
+    id: 'a'+Date.now(),
+    nombre, apellido,
+    documento: document.getElementById('f-documento').value.trim(),
+    deporte: document.getElementById('f-deporte').value,
+    sexo: document.getElementById('f-sexo').value,
+    fnac: document.getElementById('f-fnac').value,
+    lateralidad: document.getElementById('f-lateralidad').value
+  });
+  ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
+  renderAtletas();
+  showToast(`${nombre} ${apellido} guardado/a correctamente`);
+});
+document.getElementById('btn-limpiar-atleta').addEventListener('click', ()=>{
+  ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
+});
+
+// ===================== INGRESO DE MEDICIONES =====================
+function buildTabs(){
+  const tabbar = document.getElementById('tabbar');
+  const panels = document.getElementById('tabpanels');
+  tabbar.innerHTML = ''; panels.innerHTML = '';
+
+  SECCIONES.forEach((sec, i)=>{
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (i===0?' active':'');
+    btn.innerHTML = `${sec.nombre} <span class="count" id="count-${sec.id}"></span>`;
+    btn.addEventListener('click', ()=>irATab(i));
+    tabbar.appendChild(btn);
+
+    const panel = document.createElement('div');
+    panel.className = 'tabpanel' + (i===0?' active':'');
+    panel.id = 'panel-'+sec.id;
+
+    if(sec.tipo === 'generales'){
+      panel.innerHTML = `
+        <div class="field-grid">
+          <div class="field"><label>Antropometrista</label><input type="text" data-code="antropometrista" data-sec="generales"></div>
+          <div class="field">
+            <label>Lado evaluado</label>
+            <div style="display:flex; gap:18px; padding-top:9px; font-size:13.5px; color:var(--ink);">
+              <label style="display:flex; align-items:center; gap:6px; font-weight:400; text-transform:none;">
+                <input type="radio" name="lado-evaluado" value="Derecho" data-code="lado_evaluado" data-sec="generales" checked> Derecho
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; font-weight:400; text-transform:none;">
+                <input type="radio" name="lado-evaluado" value="Izquierdo" data-code="lado_evaluado" data-sec="generales"> Izquierdo
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="measure-grid" style="margin-top:16px;">
+          <div class="measure-field"><label>Handgrip Derecho <span class="unit">(kg)</span></label><input type="number" step="0.1" data-code="handgrip_derecho" data-sec="generales" placeholder="—"></div>
+          <div class="measure-field"><label>Handgrip Izquierdo <span class="unit">(kg)</span></label><input type="number" step="0.1" data-code="handgrip_izquierdo" data-sec="generales" placeholder="—"></div>
+        </div>`;
+    } else if(sec.tipo === 'texto'){
+      panel.innerHTML = `<div class="field-grid">` + sec.campos.map(([code,label])=>
+        `<div class="field"><label>${label}</label><input type="text" data-code="${code}" data-sec="${sec.id}"></div>`
+      ).join('') + `</div>`;
+    } else {
+      panel.innerHTML = `<div class="measure-grid">` + sec.campos.map(campo=>{
+        const code = slug(campo);
+        return `<div class="measure-field"><label>${campo} <span class="unit">(${sec.unidad})</span></label>
+          <input type="number" step="0.1" data-code="${code}" data-sec="${sec.id}" placeholder="—"></div>`;
+      }).join('') + `</div>`;
+    }
+    panels.appendChild(panel);
+  });
+
+  document.querySelectorAll('#tabpanels input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      if(inp.type !== 'radio') inp.classList.toggle('filled', inp.value.trim() !== '');
+      updateCounts();
+    });
+  });
+  updateCounts();
+}
+
+function updateCounts(){
+  SECCIONES.forEach(sec=>{
+    const inputs = [...document.querySelectorAll(`#panel-${sec.id} input`)].filter(i=>i.type!=='radio');
+    const filled = inputs.filter(i=>i.value.trim()!=='').length;
+    const el = document.getElementById('count-'+sec.id);
+    if(el) el.textContent = `${filled}/${inputs.length}`;
+  });
+}
+
+function irATab(i){
+  tabActual = Math.max(0, Math.min(SECCIONES.length-1, i));
+  document.querySelectorAll('.tab-btn').forEach((b,idx)=>b.classList.toggle('active', idx===tabActual));
+  document.querySelectorAll('.tabpanel').forEach((p,idx)=>p.classList.toggle('active', idx===tabActual));
+}
+document.getElementById('btn-tab-prev').addEventListener('click', ()=>irATab(tabActual-1));
+document.getElementById('btn-tab-next').addEventListener('click', ()=>irATab(tabActual+1));
+
+function seleccionarAtleta(id){
+  atletaSeleccionadoId = id || null;
+  const form = document.getElementById('eval-form');
+  const notice = document.getElementById('eval-sin-atleta');
+  if(atletaSeleccionadoId){
+    form.style.display='block'; notice.style.display='none';
+    if(!document.getElementById('tabbar').children.length) buildTabs();
+    document.querySelectorAll('#tabpanels input').forEach(i=>{
+      if(i.type === 'radio'){ i.checked = (i.value === 'Derecho'); }
+      else { i.value=''; i.classList.remove('filled'); }
+    });
+    updateCounts();
+    irATab(0);
+  } else {
+    form.style.display='none'; notice.style.display='block';
+  }
+}
+document.getElementById('eval-atleta').addEventListener('change', e=>seleccionarAtleta(e.target.value));
+
+document.getElementById('btn-guardar-evaluacion').addEventListener('click', ()=>{
+  if(!atletaSeleccionadoId){ showToast('Elegí un deportista antes de guardar'); return; }
+  const pesoInput = document.querySelector('#panel-basicas input[data-code="peso_kg_"]') || [...document.querySelectorAll('#panel-basicas input')][0];
+  const tallaInput = [...document.querySelectorAll('#panel-basicas input')][1];
+  if(!pesoInput.value || !tallaInput.value){ showToast('Peso y talla son obligatorios'); irATab(1); return; }
+
+  const mediciones = {};
+  document.querySelectorAll('#tabpanels input').forEach(inp=>{
+    if(inp.type === 'radio'){
+      if(inp.checked) mediciones[`${inp.dataset.sec}.${inp.dataset.code}`] = inp.value;
+      return;
+    }
+    mediciones[`${inp.dataset.sec}.${inp.dataset.code}`] = inp.value.trim() === '' ? null : inp.value.trim();
+  });
+  evaluaciones.push({ id:'e'+Date.now(), atletaId: atletaSeleccionadoId, fecha: new Date().toISOString(), mediciones });
+  renderAtletas();
+  if(document.getElementById('inf-atleta').value === atletaSeleccionadoId) document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
+  if(document.getElementById('evo-atleta').value === atletaSeleccionadoId) renderEvolutivo(atletaSeleccionadoId);
+  showToast('Evaluación guardada correctamente');
+});
+
+// ===================== TOAST =====================
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._tm);
+  showToast._tm = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+// ===================== INFORMES =====================
+function obtenerValor(evaluacion, sec, code){
+  const v = evaluacion.mediciones[`${sec}.${code}`];
+  return (v===undefined || v===null || v==='') ? null : parseFloat(v);
+}
+
+// Cálculo del fraccionamiento. Usa fórmulas REALES donde ya las confirmamos
+// (masa ósea: Rocha 1974 — masa residual: constante de Würch 1974 — superficie
+// corporal: Du Bois). El % adiposo usa Faulkner como referencia provisoria
+// (a reemplazar por la tabla de Withers y cols. que cita tu informe actual),
+// y la masa de piel del modelo de Kerr es una aproximación por espesor medio
+// hasta cargar las tablas completas de proporcionalidad Phantom.
+function calcularFraccionamiento(evaluacion, atleta){
+  const peso = obtenerValor(evaluacion,'basicas','peso_kg');
+  const talla = obtenerValor(evaluacion,'basicas','talla_cm');
+  const tric = obtenerValor(evaluacion,'pliegues','tricipital');
+  const sub = obtenerValor(evaluacion,'pliegues','subescapular');
+  const supra = obtenerValor(evaluacion,'pliegues','supraespinal');
+  const abd = obtenerValor(evaluacion,'pliegues','abdominal');
+  const munieca = obtenerValor(evaluacion,'diametros','biestiloideo');
+  const femur = obtenerValor(evaluacion,'diametros','bicond_femur');
+
+  const r = {peso, talla, pctGraso:null, kgGraso:null, pctMuscular:null, kgMuscular:null,
+             pctOseo:null, kgOseo:null, pctResidual:null, kgResidual:null,
+             superficie:null, pctPiel:null, kgPiel:null, pctResidualKerr:null, kgResidualKerr:null};
+
+  if([tric,sub,supra,abd].every(v=>v!==null && !isNaN(v))){
+    r.pctGraso = (tric+sub+supra+abd)*0.153 + 5.783;
+  }
+  if(talla!==null && munieca!==null && femur!==null){
+    const s = talla/100, wrist = munieca/100, fem = femur/100;
+    r.kgOseo = 3.02 * Math.pow(s*s*wrist*fem*400, 0.712);
+    if(peso!==null) r.pctOseo = r.kgOseo/peso*100;
+  }
+  r.pctResidual = atleta.sexo === 'M' ? 24.1 : 20.9;
+  if(peso!==null) r.kgResidual = peso*r.pctResidual/100;
+
+  if(r.pctGraso!==null && r.pctOseo!==null && peso!==null){
+    r.pctMuscular = 100 - r.pctGraso - r.pctOseo - r.pctResidual;
+    r.kgGraso = peso*r.pctGraso/100;
+    r.kgMuscular = peso*r.pctMuscular/100;
+  }
+
+  if(peso!==null && talla!==null){
+    r.superficie = (Math.pow(peso,0.425) * Math.pow(talla,0.725) * 71.84) / 10000;
+    r.kgPiel = r.superficie * 1.98;
+    r.pctPiel = r.kgPiel/peso*100;
+    if(r.kgGraso!==null && r.kgMuscular!==null && r.kgOseo!==null){
+      r.kgResidualKerr = peso - (r.kgGraso + r.kgMuscular + r.kgOseo + r.kgPiel);
+      r.pctResidualKerr = r.kgResidualKerr/peso*100;
+    }
+  }
+  return r;
+}
+
+function poblarSelectAtletas(selectId){
+  const sel = document.getElementById(selectId);
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Seleccioná —</option>';
+  atletas.forEach(a=>{
+    const opt = document.createElement('option');
+    opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre}`;
+    sel.appendChild(opt);
+  });
+  if(actual) sel.value = actual;
+}
+
+function renderInformesSelectores(){
+  poblarSelectAtletas('inf-atleta');
+}
+
+document.getElementById('inf-atleta').addEventListener('change', e=>{
+  const evalSel = document.getElementById('inf-evaluacion');
+  const evs = evaluaciones.filter(ev=>ev.atletaId===e.target.value).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  evalSel.innerHTML = '';
+  document.getElementById('inf-contenido').innerHTML = '';
+  if(evs.length===0){
+    evalSel.innerHTML = '<option value="">Sin evaluaciones cargadas</option>';
+    evalSel.disabled = true;
+    return;
+  }
+  evalSel.disabled = false;
+  evs.forEach(ev=>{
+    const opt = document.createElement('option');
+    opt.value = ev.id; opt.textContent = new Date(ev.fecha).toLocaleString('es-AR');
+    evalSel.appendChild(opt);
+  });
+  renderInforme(evs[0].id, e.target.value);
+});
+document.getElementById('inf-evaluacion').addEventListener('change', e=>{
+  renderInforme(e.target.value, document.getElementById('inf-atleta').value);
+});
+
+// Somatotipo (Heath-Carter, 1975) — fórmulas reales:
+// Endomorfia: desde la suma de tricipital+subescapular+supraespinal, corregida por talla.
+// Mesomorfia: desde diámetros óseos y perímetros corregidos por el pliegue del mismo segmento.
+// Ectomorfia: desde el índice talla/raíz cúbica del peso (HWR).
+function calcularSomatotipo(evaluacion){
+  const peso = obtenerValor(evaluacion,'basicas','peso_kg');
+  const talla = obtenerValor(evaluacion,'basicas','talla_cm');
+  const tric = obtenerValor(evaluacion,'pliegues','tricipital');
+  const sub = obtenerValor(evaluacion,'pliegues','subescapular');
+  const supra = obtenerValor(evaluacion,'pliegues','supraespinal');
+  const pierna = obtenerValor(evaluacion,'pliegues','pierna_medial');
+  const biepHumero = obtenerValor(evaluacion,'diametros','biep_humero');
+  const bicondFemur = obtenerValor(evaluacion,'diametros','bicond_femur');
+  const brazoContraido = obtenerValor(evaluacion,'perimetros','brazo_contraido');
+  const perimPierna = obtenerValor(evaluacion,'perimetros','pierna');
+
+  if([peso,talla,tric,sub,supra].some(v=>v===null)) return null;
+
+  const X = (tric+sub+supra) * (170.18/talla);
+  const endo = -0.7182 + 0.1451*X - 0.00068*Math.pow(X,2) + 0.0000014*Math.pow(X,3);
+
+  let meso = null;
+  if([pierna,biepHumero,bicondFemur,brazoContraido,perimPierna].every(v=>v!==null)){
+    const brazoCorr = brazoContraido - (tric/10);
+    const piernaCorr = perimPierna - (pierna/10);
+    meso = 0.858*biepHumero + 0.601*bicondFemur + 0.188*brazoCorr + 0.161*piernaCorr - 0.131*talla + 4.5;
+  }
+
+  const hwr = talla / Math.cbrt(peso);
+  let ecto;
+  if(hwr >= 40.75) ecto = 0.732*hwr - 28.58;
+  else if(hwr >= 38.25) ecto = 0.463*hwr - 17.63;
+  else ecto = 0.1;
+
+  if(meso===null) return {endo, meso:null, ecto, x:null, y:null};
+  const x = ecto - endo;
+  const y = 2*meso - (endo + ecto);
+  return {endo, meso, ecto, x, y};
+}
+
+function svgSomatocarta(s){
+  const w=380, h=380, cx=190, cy=250;
+  const scale = 15; // px por unidad de somatotipo
+  const px = v => cx + v*scale;
+  const py = v => cy - v*scale;
+  const rango = 9;
+
+  // grilla de fondo cada 1 unidad, más marcada cada 3
+  let grid = '';
+  for(let i=-rango; i<=rango; i++){
+    const fuerte = (i % 3 === 0);
+    grid += `<line x1="${px(i)}" y1="${py(-4)}" x2="${px(i)}" y2="${py(11)}" stroke="${fuerte?'#e3e7ec':'#f1f3f5'}" stroke-width="${fuerte?1:0.6}"/>`;
+  }
+  for(let j=-4; j<=11; j++){
+    const fuerte = (j % 3 === 0);
+    grid += `<line x1="${px(-rango)}" y1="${py(j)}" x2="${px(rango)}" y2="${py(j)}" stroke="${fuerte?'#e3e7ec':'#f1f3f5'}" stroke-width="${fuerte?1:0.6}"/>`;
+  }
+
+  // zona "central/balanceada" de referencia (radio ~1 unidad alrededor del origen del somatotipo medio)
+  const zonaCentral = `<circle cx="${px(0)}" cy="${py(2.5)}" r="${1*scale}" fill="#0d948810" stroke="#0d948850" stroke-dasharray="3 3"/>`;
+
+  let punto = '';
+  if(s.x!==null){
+    const X = px(s.x).toFixed(1), Y = py(s.y).toFixed(1);
+    punto = `
+      <line x1="${X}" y1="${Y}" x2="${X}" y2="${py(-4)}" stroke="#0d9488" stroke-width="1" stroke-dasharray="4 3"/>
+      <line x1="${X}" y1="${Y}" x2="${px(-rango)}" y2="${Y}" stroke="#0d9488" stroke-width="1" stroke-dasharray="4 3"/>
+      <circle cx="${X}" cy="${Y}" r="7.5" fill="#0d9488" stroke="#04241f" stroke-width="1.5"/>
+      <text x="${X}" y="${Number(Y)-14}" text-anchor="middle" class="evo-point-label" font-weight="700" font-size="12">${s.endo.toFixed(1)} – ${s.meso.toFixed(1)} – ${s.ecto.toFixed(1)}</text>`;
+  }
+
+  return `<svg width="280" height="280" viewBox="0 0 ${w} ${h}">
+    ${grid}
+    ${zonaCentral}
+    <line x1="${px(-rango)}" y1="${py(0)}" x2="${px(rango)}" y2="${py(0)}" stroke="#b7bfc9" stroke-width="1.3"/>
+    <line x1="${px(0)}" y1="${py(-4)}" x2="${px(0)}" y2="${py(11)}" stroke="#b7bfc9" stroke-width="1.3"/>
+    <text x="${px(-rango)+4}" y="${py(0)-8}" class="evo-point-label" font-weight="700">ENDOMORFIA</text>
+    <text x="${px(rango)-4}" y="${py(0)-8}" text-anchor="end" class="evo-point-label" font-weight="700">ECTOMORFIA</text>
+    <text x="${px(0)+6}" y="${py(11)+12}" class="evo-point-label" font-weight="700">MESOMORFIA</text>
+    ${punto}
+  </svg>`;
+}
+
+function somatotipoCard(ev, atleta){
+  const s = calcularSomatotipo(ev);
+  if(!s) return `<div class="card"><h2>Somatotipo (Heath-Carter)</h2><div class="empty">Faltan peso, talla o los pliegues tricipital/subescapular/supraespinal para calcular el somatotipo.</div></div>`;
+  const mesoTxt = s.meso!==null ? s.meso.toFixed(2) : '—';
+  return `<div class="card">
+    <h2>Somatotipo (Heath-Carter, 1975)</h2>
+    <div class="report-chart" style="align-items:flex-start;">
+      ${svgSomatocarta(s)}
+      <div>
+        <table class="report-table" style="width:220px;">
+          <tr><td class="rlabel">Endomorfia</td><td class="rval">${s.endo.toFixed(2)}</td></tr>
+          <tr><td class="rlabel">Mesomorfia</td><td class="rval">${mesoTxt}</td></tr>
+          <tr class="rtotal"><td class="rlabel">Ectomorfia</td><td class="rval">${s.ecto.toFixed(2)}</td></tr>
+        </table>
+        ${s.meso===null ? '<p class="evo-empty" style="padding-top:10px;">Faltan diámetros/perímetros de brazo y pierna para ubicar el punto en la carta (mesomorfia).</p>' : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// Edad decimal, índice córmico (Gerhard-Rautmann) y sumatoria de 6 pliegues
+function calcularIndicesComplementarios(ev, atleta){
+  const talla = obtenerValor(ev,'basicas','talla_cm');
+  const tallaSentada = obtenerValor(ev,'basicas','talla_sentada_cm');
+  const tric = obtenerValor(ev,'pliegues','tricipital');
+  const sub = obtenerValor(ev,'pliegues','subescapular');
+  const supra = obtenerValor(ev,'pliegues','supraespinal');
+  const abd = obtenerValor(ev,'pliegues','abdominal');
+  const muslo = obtenerValor(ev,'pliegues','muslo_anterior');
+  const pierna = obtenerValor(ev,'pliegues','pierna_medial');
+
+  const edadDecimal = atleta.fnac ? (new Date(ev.fecha) - new Date(atleta.fnac)) / 3.15576e10 : null;
+  const indiceCormico = (talla!==null && tallaSentada!==null) ? (tallaSentada/talla*100) : null;
+  let suma6 = null;
+  if([tric,sub,supra,abd,muslo,pierna].every(v=>v!==null)) suma6 = tric+sub+supra+abd+muslo+pierna;
+
+  return {edadDecimal, indiceCormico, suma6};
+}
+
+function indicesCard(ev, atleta){
+  const d = calcularIndicesComplementarios(ev, atleta);
+  return `<div class="card">
+    <h2>Índices y sumatorias complementarias</h2>
+    <table class="report-table">
+      <tr><td class="rlabel">Edad decimal</td><td class="rval">${d.edadDecimal!==null ? d.edadDecimal.toFixed(2)+' años' : '—'}</td></tr>
+      <tr><td class="rlabel">Índice córmico (Gerhard-Rautmann)</td><td class="rval">${d.indiceCormico!==null ? d.indiceCormico.toFixed(2)+'%' : '—'}</td></tr>
+      <tr class="rtotal"><td class="rlabel">Sumatoria de 6 pliegues</td><td class="rval">${d.suma6!==null ? d.suma6.toFixed(1)+' mm' : '—'}</td></tr>
+    </table>
+  </div>`;
+}
+
+function handgripCard(ev, atleta){
+  const der = obtenerValor(ev,'generales','handgrip_derecho');
+  const izq = obtenerValor(ev,'generales','handgrip_izquierdo');
+  const lado = ev.mediciones['generales.lado_evaluado'] || '—';
+  const asimetria = (der!==null && izq!==null && (der+izq)>0) ? Math.abs(der-izq)/Math.max(der,izq)*100 : null;
+  return `<div class="card">
+    <h2>Fuerza de prensión manual (Handgrip)</h2>
+    <table class="report-table">
+      <tr><td class="rlabel">Lateralidad del deportista</td><td class="rval">${atleta.lateralidad || '—'}</td></tr>
+      <tr><td class="rlabel">Lado evaluado (antropometría)</td><td class="rval">${lado}</td></tr>
+      <tr><td class="rlabel">Handgrip Derecho</td><td class="rval">${der!==null ? der.toFixed(1)+' kg' : '—'}</td></tr>
+      <tr><td class="rlabel">Handgrip Izquierdo</td><td class="rval">${izq!==null ? izq.toFixed(1)+' kg' : '—'}</td></tr>
+      <tr class="rtotal"><td class="rlabel">Asimetría entre manos</td><td class="rval">${asimetria!==null ? asimetria.toFixed(1)+'%' : '—'}</td></tr>
+    </table>
+  </div>`;
+}
+
+function renderInforme(evalId, atletaId){
+  const cont = document.getElementById('inf-contenido');
+  const ev = evaluaciones.find(x=>x.id===evalId);
+  const atleta = atletas.find(a=>a.id===atletaId);
+  if(!ev || !atleta){ cont.innerHTML=''; return; }
+  const r = calcularFraccionamiento(ev, atleta);
+
+  if(r.pctGraso===null || r.pctMuscular===null){
+    cont.innerHTML = `<div class="card"><div class="empty">Para generar las hojas hacen falta los 4 pliegues (tricipital, subescapular, supraespinal, abdominal) y los diámetros de muñeca y fémur (masa ósea, necesaria para calcular la masa muscular por diferencia).</div></div>`;
+    return;
+  }
+
+  cont.innerHTML = `
+    <div class="tabbar" id="inf-hoja-tabbar">
+      <button class="tab-btn active" data-hoja="4c">4 Componentes — De Rose y Guimarães</button>
+      <button class="tab-btn" data-hoja="5c">5 Componentes — Kerr</button>
+    </div>
+    <div id="inf-hoja-4c" class="tabpanel active"></div>
+    <div id="inf-hoja-5c" class="tabpanel"></div>
+    ${somatotipoCard(ev, atleta)}
+    ${indicesCard(ev, atleta)}
+    ${handgripCard(ev, atleta)}`;
+
+  document.getElementById('inf-hoja-4c').innerHTML = hoja4C(ev, atleta, r);
+  document.getElementById('inf-hoja-5c').innerHTML = hoja5C(ev, atleta, r);
+
+  document.querySelectorAll('#inf-hoja-tabbar .tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#inf-hoja-tabbar .tab-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('inf-hoja-4c').classList.toggle('active', btn.dataset.hoja==='4c');
+      document.getElementById('inf-hoja-5c').classList.toggle('active', btn.dataset.hoja==='5c');
+    });
+  });
+}
+
+function hojaHeader(atleta, ev, r){
+  return `<table class="hoja-header">
+    <tr><td>Apellido y Nombre: <b>${atleta.apellido.toUpperCase()} ${atleta.nombre.toUpperCase()}</b></td>
+        <td>Sexo: <b>${atleta.sexo==='F'?'FEMENINO':'MASCULINO'}</b></td>
+        <td>Fecha de Observación: <b>${new Date(ev.fecha).toLocaleDateString('es-AR')}</b></td></tr>
+    <tr><td>Actividad Física: <b>${atleta.deporte.toUpperCase()}</b></td>
+        <td>Talla (cm): <b>${r.talla!==null?r.talla.toFixed(1):'—'}</b></td>
+        <td>Fecha de Nacimiento: <b>${atleta.fnac?new Date(atleta.fnac).toLocaleDateString('es-AR'):'—'}</b></td></tr>
+    <tr><td>Nivel: <b>—</b></td>
+        <td>Peso (kg): <b>${r.peso!==null?r.peso.toFixed(2):'—'}</b></td>
+        <td>Edad (años): <b>${atleta.fnac? ((new Date(ev.fecha)-new Date(atleta.fnac))/3.15576e10).toFixed(1) : '—'}</b></td></tr>
+  </table>`;
+}
+
+function hoja4C(ev, atleta, r){
+  return `<div class="hoja">
+    ${hojaHeader(atleta, ev, r)}
+    <div class="hoja-title">FRACCIONAMIENTO ANTROPOMETRICO</div>
+    <div class="hoja-model">MODELO DE CUATRO COMPONENTES (De Rose y Guimaraes)</div>
+    <p class="hoja-desc">El modelo tetracompartimental modificado, basado en la propuesta de E. H. De Rose y A. C. Guimaraes de
+      principios de los 80, fracciona el peso corporal en masa adiposa, masa muscular, masa ósea y masa residual.</p>
+
+    <table class="report-table">
+      <tr><td class="rlabel">Porcentaje Adiposo</td><td class="rval">${r.pctGraso.toFixed(2)}%</td><td class="rlabel">Masa Adiposa (kg)</td><td class="rval">${r.kgGraso.toFixed(2)}</td></tr>
+      <tr><td class="rlabel">Porcentaje Muscular</td><td class="rval">${r.pctMuscular.toFixed(2)}%</td><td class="rlabel">Masa Muscular (kg)</td><td class="rval">${r.kgMuscular.toFixed(2)}</td></tr>
+      <tr><td class="rlabel">Porcentaje Óseo</td><td class="rval">${r.pctOseo!==null?r.pctOseo.toFixed(2)+'%':'—'}</td><td class="rlabel">Masa Ósea (kg)</td><td class="rval">${r.kgOseo!==null?r.kgOseo.toFixed(2):'—'}</td></tr>
+      <tr class="rtotal"><td class="rlabel">Porcentaje Residual</td><td class="rval">${r.pctResidual.toFixed(2)}%</td><td class="rlabel">Masa Residual (kg)</td><td class="rval">${r.kgResidual.toFixed(2)}</td></tr>
+    </table>
+
+    <div class="report-chart">
+      <div class="report-pie" style="background: conic-gradient(
+        #d6437a 0% ${r.pctGraso}%,
+        #3f9142 ${r.pctGraso}% ${r.pctGraso+r.pctMuscular}%,
+        #e8c93a ${r.pctGraso+r.pctMuscular}% ${r.pctGraso+r.pctMuscular+(r.pctOseo||0)}%,
+        #2b6cb0 ${r.pctGraso+r.pctMuscular+(r.pctOseo||0)}% 100%);"></div>
+      <div class="report-legend">
+        <div><span class="sw" style="background:#d6437a"></span>Adiposo — ${r.pctGraso.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#3f9142"></span>Muscular — ${r.pctMuscular.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#e8c93a"></span>Óseo — ${r.pctOseo!==null?r.pctOseo.toFixed(1):'—'}%</div>
+        <div><span class="sw" style="background:#2b6cb0"></span>Residual — ${r.pctResidual.toFixed(1)}%</div>
+      </div>
+    </div>
+
+    <p class="hoja-footnote">Masa ósea calculada con la ecuación de Von Döbeln modificada por Rocha (1974) a partir de talla,
+      diámetro de muñeca y diámetro de fémur. Masa residual como constante fija de Würch (1974) según sexo
+      (24.1% hombres / 20.9% mujeres). Porcentaje adiposo estimado con la ecuación de Faulkner como referencia provisoria
+      (a reemplazar por la tabla específica de Withers y cols. según edad/sexo/actividad, igual que en el informe actual).
+      Masa muscular obtenida por diferencia.</p>
+
+    <div class="btn-row" style="justify-content:flex-start;"><button class="btn btn-ghost" onclick="imprimirElementoPadre(this)">Imprimir / PDF</button></div>
+  </div>`;
+}
+
+function hoja5C(ev, atleta, r){
+  const pctPiel = r.pctPiel, kgPiel = r.kgPiel;
+  const pctResidual = r.pctResidualKerr, kgResidual = r.kgResidualKerr;
+  const okKerr = pctPiel!==null && pctResidual!==null;
+  return `<div class="hoja">
+    ${hojaHeader(atleta, ev, r)}
+    <div class="hoja-title">FRACCIONAMIENTO ANTROPOMETRICO</div>
+    <div class="hoja-model">MODELO DE CINCO COMPONENTES (Kerr)</div>
+    <p class="hoja-desc">El modelo pentacompartimental fue descripto por la Dra. D. A. Kerr (1988), adaptado del trabajo
+      original de Drinkwater y Ross. Los cinco componentes (piel, adiposo, muscular, óseo y residual) se estiman desde
+      medidas antropométricas estándares, escalados según la proporcionalidad Phantom (Ross y Wilson, 1974; modificado
+      por Ross y Ward, 1982).</p>
+
+    ${!okKerr ? `<div class="empty">Falta talla/peso para completar la superficie corporal y estimar la masa de piel.</div>` : `
+    <table class="report-table">
+      <tr><td class="rlabel">Porcentaje Adiposo</td><td class="rval">${r.pctGraso.toFixed(2)}%</td><td class="rlabel">Masa Adiposa (kg)</td><td class="rval">${r.kgGraso.toFixed(2)}</td></tr>
+      <tr><td class="rlabel">Porcentaje Muscular</td><td class="rval">${r.pctMuscular.toFixed(2)}%</td><td class="rlabel">Masa Muscular (kg)</td><td class="rval">${r.kgMuscular.toFixed(2)}</td></tr>
+      <tr><td class="rlabel">Porcentaje Óseo</td><td class="rval">${r.pctOseo.toFixed(2)}%</td><td class="rlabel">Masa Ósea (kg)</td><td class="rval">${r.kgOseo.toFixed(2)}</td></tr>
+      <tr><td class="rlabel">Porcentaje Residual</td><td class="rval">${pctResidual.toFixed(2)}%</td><td class="rlabel">Masa Residual (kg)</td><td class="rval">${kgResidual.toFixed(2)}</td></tr>
+      <tr class="rtotal"><td class="rlabel">Porcentaje Piel</td><td class="rval">${pctPiel.toFixed(2)}%</td><td class="rlabel">Masa Piel (kg)</td><td class="rval">${kgPiel.toFixed(2)}</td></tr>
+    </table>
+
+    <div class="report-chart">
+      <div class="report-pie" style="background: conic-gradient(
+        #d6437a 0% ${r.pctGraso}%,
+        #3f9142 ${r.pctGraso}% ${r.pctGraso+r.pctMuscular}%,
+        #e8c93a ${r.pctGraso+r.pctMuscular}% ${r.pctGraso+r.pctMuscular+r.pctOseo}%,
+        #2b6cb0 ${r.pctGraso+r.pctMuscular+r.pctOseo}% ${r.pctGraso+r.pctMuscular+r.pctOseo+pctResidual}%,
+        #e08a2b ${r.pctGraso+r.pctMuscular+r.pctOseo+pctResidual}% 100%);"></div>
+      <div class="report-legend">
+        <div><span class="sw" style="background:#d6437a"></span>Adiposo — ${r.pctGraso.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#3f9142"></span>Muscular — ${r.pctMuscular.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#e8c93a"></span>Óseo — ${r.pctOseo.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#2b6cb0"></span>Residual — ${pctResidual.toFixed(1)}%</div>
+        <div><span class="sw" style="background:#e08a2b"></span>Piel — ${pctPiel.toFixed(1)}%</div>
+      </div>
+    </div>`}
+
+    <p class="hoja-footnote">La masa ósea usa la misma ecuación de Rocha (1974) que en la hoja de 4 componentes. La masa
+      de piel se estima a partir de la superficie corporal (Du Bois) y un espesor promedio de piel — es una aproximación
+      hasta cargar las tablas completas de proporcionalidad Phantom del método original de Kerr, que necesitan los
+      valores de referencia por variable (media y desvío estándar de la población Phantom) que todavía no tenemos
+      digitalizados.</p>
+
+    <div class="btn-row" style="justify-content:flex-start;"><button class="btn btn-ghost" onclick="imprimirElementoPadre(this)">Imprimir / PDF</button></div>
+  </div>`;
+}
+
+// ===================== EVOLUTIVO =====================
+function renderEvolutivoSelector(){
+  poblarSelectAtletas('evo-atleta');
+}
+
+document.getElementById('evo-atleta').addEventListener('change', e=>renderEvolutivo(e.target.value));
+
+const EVO_CHARTS = [
+  {key:'peso', label:'Peso corporal (kg)', color:'#0d9488'},
+  {key:'talla', label:'Talla (cm)', color:'#2b6cb0'},
+  {key:'kgGraso', label:'Masa Grasa — 4 Componentes (kg)', color:'#d6437a'},
+  {key:'kgMuscular', label:'Masa Muscular — 4 Componentes (kg)', color:'#3f9142'},
+  {key:'kgGraso5c', label:'Masa Grasa — 5 Componentes (kg)', color:'#c2557a'},
+  {key:'kgMuscular5c', label:'Masa Muscular — 5 Componentes (kg)', color:'#5fa662'},
+  {key:'hgDer', label:'Handgrip Derecho (kg)', color:'#c47f17'},
+  {key:'hgIzq', label:'Handgrip Izquierdo (kg)', color:'#7c4dff'}
+];
+
+function valorEvoChart(p, key){
+  if(key==='kgGraso5c') return p.kgGraso;   // hoy comparte cálculo con 4C (ver nota)
+  if(key==='kgMuscular5c') return p.kgMuscular;
+  return p[key];
+}
+
+function construirEvolutivoHTML(atletaId){
+  const atleta = atletas.find(a=>a.id===atletaId);
+  if(!atleta) return '';
+  const evs = evaluaciones.filter(ev=>ev.atletaId===atletaId).sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const puntos = evs.map(ev=>({
+    fecha: new Date(ev.fecha),
+    ...calcularFraccionamiento(ev, atleta),
+    hgDer: obtenerValor(ev,'generales','handgrip_derecho'),
+    hgIzq: obtenerValor(ev,'generales','handgrip_izquierdo')
+  }));
+  const conPeso = puntos.filter(p=>p.peso!==null);
+
+  if(conPeso.length < 2){
+    return `<div class="card"><div class="evo-empty">Necesitás al menos 2 evaluaciones con peso cargado para ver la evolución de ${atleta.nombre} ${atleta.apellido}.</div></div>`;
+  }
+
+  let html = `<div class="disclaimer">Los valores de 4 y 5 componentes comparten hoy el mismo cálculo de masa grasa/muscular — van a diferir cuando conectemos la tabla de Withers y el método Phantom completo de Kerr.</div>`;
+
+  EVO_CHARTS.forEach(cfg=>{
+    const serie = puntos
+      .map(p=>({fecha:p.fecha, valor:valorEvoChart(p,cfg.key)}))
+      .filter(pt=>pt.valor!==null && pt.valor!==undefined && !isNaN(pt.valor));
+    if(serie.length < 2){
+      html += `<div class="card"><h2>${cfg.label}</h2><div class="evo-empty">Datos insuficientes para graficar esta variable.</div></div>`;
+    } else {
+      html += `<div class="card"><h2>${cfg.label}</h2>${svgLineChart(serie.map(s=>s.valor), serie.map(s=>s.fecha), cfg.color)}</div>`;
+    }
+  });
+  return html;
+}
+
+function renderEvolutivo(atletaId){
+  const cont = document.getElementById('evo-contenido');
+  cont.innerHTML = atletaId ? construirEvolutivoHTML(atletaId) : '';
+}
+
+function svgLineChart(valores, fechas, color){
+  const w=760, h=190, padL=40, padR=20, padT=16, padB=30;
+  const min = Math.min(...valores), max = Math.max(...valores);
+  const range = (max-min) || 1;
+  const step = (w-padL-padR) / (valores.length-1);
+  const yFor = v => padT + (h-padT-padB) * (1 - (v-min)/range);
+  const xFor = i => padL + step*i;
+
+  const pathD = valores.map((v,i)=> `${i===0?'M':'L'} ${xFor(i).toFixed(1)} ${yFor(v).toFixed(1)}`).join(' ');
+  const points = valores.map((v,i)=>
+    `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="4" fill="${color}"/>
+     <text x="${xFor(i).toFixed(1)}" y="${(yFor(v)-10).toFixed(1)}" text-anchor="middle" class="evo-point-label">${v.toFixed(1)}</text>
+     <text x="${xFor(i).toFixed(1)}" y="${h-8}" text-anchor="middle" class="evo-point-label">${fechas[i].toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'})}</text>`
+  ).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}">
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#dfe3ea"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#dfe3ea"/>
+    <path d="${pathD}" fill="none" stroke="${color}" stroke-width="2.5"/>
+    ${points}
+  </svg>`;
+}
+
+// ===================== BIG DATA =====================
+const BD_VARS = [
+  {key:'peso', label:'Peso (kg)'},
+  {key:'talla', label:'Talla (cm)'},
+  {key:'envergadura', label:'Envergadura (cm)'},
+  {key:'grasa4c', label:'% Masa Grasa (4C — De Rose y Guimarães)'},
+  {key:'muscular4c', label:'% Masa Muscular (4C — De Rose y Guimarães)'},
+  {key:'grasa5c', label:'% Masa Grasa (5C — Kerr)'},
+  {key:'muscular5c', label:'% Masa Muscular (5C — Kerr)'}
+];
+const BD_DEPORTES = ['Pentathlón','Fútbol','Handball','Natación','Atletismo','Rugby'];
+const BD_COLORES = {'Pentathlón':'#0d9488','Fútbol':'#d6437a','Handball':'#c47f17','Natación':'#2b6cb0','Atletismo':'#3f9142','Rugby':'#7c4dff'};
+const BD_ANIOS = [2023,2024,2025];
+
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function generarBigData(){
+  const rnd = mulberry32(20260731);
+  const data = [];
+  BD_DEPORTES.forEach(deporte=>{
+    BD_ANIOS.forEach(anio=>{
+      const n = 4 + Math.floor(rnd()*4); // 4 a 7 atletas por deporte/año
+      for(let i=0;i<n;i++){
+        const talla = 160 + rnd()*35;
+        const envergadura = talla + (rnd()*10-3);
+        const pesoBase = (talla-100) + rnd()*15 - 5;
+        const grasa4c = 8 + rnd()*20;
+        const muscular4c = 36 + rnd()*16 - (grasa4c-15)*0.3;
+        const grasa5c = grasa4c + (rnd()*6-3);
+        const muscular5c = muscular4c + (rnd()*5-2.5);
+        data.push({
+          deporte, anio,
+          peso: +pesoBase.toFixed(1),
+          talla: +talla.toFixed(1),
+          envergadura: +envergadura.toFixed(1),
+          grasa4c: +grasa4c.toFixed(1),
+          muscular4c: +muscular4c.toFixed(1),
+          grasa5c: +grasa5c.toFixed(1),
+          muscular5c: +muscular5c.toFixed(1)
+        });
+      }
+    });
+  });
+  return data;
+}
+const BD_DATA = generarBigData();
+
+// Usada por los botones "Imprimir / PDF" de cada hoja individual (4C / 5C).
+// Necesaria porque el CSS de impresión oculta todo salvo #print-area:
+// sin esto, esos botones imprimían una hoja en blanco.
+function imprimirElementoPadre(btn){
+  const hoja = btn.closest('.hoja');
+  if(!hoja){ window.print(); return; }
+  document.getElementById('print-area').innerHTML = hoja.outerHTML;
+  window.print();
+}
+
+// ===================== IMPRESIÓN COMBINADA =====================
+document.getElementById('btn-imprimir-todo').addEventListener('click', ()=>{
+  const atletaId = document.getElementById('inf-atleta').value;
+  const evalId = document.getElementById('inf-evaluacion').value;
+  if(!atletaId || !evalId){ showToast('Elegí deportista y evaluación primero'); return; }
+
+  const incluir4c = document.getElementById('chk-4c').checked;
+  const incluir5c = document.getElementById('chk-5c').checked;
+  const incluirEvo = document.getElementById('chk-evo').checked;
+  if(!incluir4c && !incluir5c && !incluirEvo){ showToast('Elegí al menos una sección para imprimir'); return; }
+
+  const atleta = atletas.find(a=>a.id===atletaId);
+  const ev = evaluaciones.find(e=>e.id===evalId);
+  const r = calcularFraccionamiento(ev, atleta);
+
+  let html = '';
+  if(incluir4c) html += hoja4C(ev, atleta, r);
+  if(incluir5c) html += hoja5C(ev, atleta, r);
+  if(incluirEvo) html += `<div class="hoja">${construirEvolutivoHTML(atletaId)}</div>`;
+
+  document.getElementById('print-area').innerHTML = html;
+  window.print();
+});
+
+function initBigData(){
+  const selAnio = document.getElementById('bd-anio');
+  selAnio.innerHTML = '<option value="">Todos los años</option>' + BD_ANIOS.map(a=>`<option value="${a}">${a}</option>`).join('');
+
+  const selDeporte = document.getElementById('bd-deporte');
+  selDeporte.innerHTML = '<option value="">Todos los deportes</option>' + BD_DEPORTES.map(d=>`<option value="${d}">${d}</option>`).join('');
+
+  const selX = document.getElementById('bd-x');
+  const selY = document.getElementById('bd-y');
+  const opts = BD_VARS.map(v=>`<option value="${v.key}">${v.label}</option>`).join('');
+  selX.innerHTML = opts; selY.innerHTML = opts;
+  selX.value = 'peso'; selY.value = 'grasa4c';
+
+  [selAnio, selDeporte, selX, selY].forEach(el=>el.addEventListener('change', renderBigData));
+  renderBigData();
+}
+
+function renderBigData(){
+  const anio = document.getElementById('bd-anio').value;
+  const deporte = document.getElementById('bd-deporte').value;
+  const xKey = document.getElementById('bd-x').value;
+  const yKey = document.getElementById('bd-y').value;
+  const xLabel = BD_VARS.find(v=>v.key===xKey).label;
+  const yLabel = BD_VARS.find(v=>v.key===yKey).label;
+
+  let filtrado = BD_DATA;
+  if(anio) filtrado = filtrado.filter(d=>String(d.anio)===anio);
+  if(deporte) filtrado = filtrado.filter(d=>d.deporte===deporte);
+
+  document.getElementById('bd-titulo').textContent = `${yLabel}  vs.  ${xLabel}  (${filtrado.length} deportistas)`;
+  document.getElementById('bd-chart').innerHTML = svgScatter(filtrado, xKey, yKey, xLabel, yLabel);
+
+  const deportesPresentes = [...new Set(filtrado.map(d=>d.deporte))];
+  document.getElementById('bd-legend').innerHTML = deportesPresentes.map(d=>
+    `<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;"><span class="sw" style="width:11px;height:11px;border-radius:50%;background:${BD_COLORES[d]}; display:inline-block;"></span>${d}</div>`
+  ).join('');
+}
+
+function svgScatter(data, xKey, yKey, xLabel, yLabel){
+  if(data.length===0) return `<div class="evo-empty">No hay deportistas para este filtro.</div>`;
+  const w=760, h=420, padL=54, padR=20, padT=16, padB=44;
+  const xs = data.map(d=>d[xKey]), ys = data.map(d=>d[yKey]);
+  const xMin=Math.min(...xs), xMax=Math.max(...xs), xRange=(xMax-xMin)||1;
+  const yMin=Math.min(...ys), yMax=Math.max(...ys), yRange=(yMax-yMin)||1;
+  const xFor = v => padL + (w-padL-padR) * (v-xMin)/xRange;
+  const yFor = v => padT + (h-padT-padB) * (1-(v-yMin)/yRange);
+
+  const gridLines = [0,0.25,0.5,0.75,1].map(f=>{
+    const y = padT + (h-padT-padB)*f;
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eef0f3"/>`;
+  }).join('');
+
+  const points = data.map(d=>{
+    const cx=xFor(d[xKey]).toFixed(1), cy=yFor(d[yKey]).toFixed(1);
+    return `<circle cx="${cx}" cy="${cy}" r="5" fill="${BD_COLORES[d.deporte]}" fill-opacity="0.78" stroke="#fff" stroke-width="1">
+      <title>${d.deporte} — ${d.anio}\n${xLabel}: ${d[xKey]}\n${yLabel}: ${d[yKey]}</title>
+    </circle>`;
+  }).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}">
+    ${gridLines}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ccd4"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ccd4"/>
+    <text x="${(padL+w-padR)/2}" y="${h-8}" text-anchor="middle" class="evo-point-label">${xLabel}</text>
+    <text x="14" y="${(padT+h-padB)/2}" text-anchor="middle" class="evo-point-label" transform="rotate(-90 14 ${(padT+h-padB)/2})">${yLabel}</text>
+    <text x="${padL}" y="${h-padB+16}" class="evo-point-label">${xMin.toFixed(1)}</text>
+    <text x="${w-padR}" y="${h-padB+16}" text-anchor="end" class="evo-point-label">${xMax.toFixed(1)}</text>
+    <text x="${padL-6}" y="${padT+4}" text-anchor="end" class="evo-point-label">${yMax.toFixed(1)}</text>
+    <text x="${padL-6}" y="${h-padB}" text-anchor="end" class="evo-point-label">${yMin.toFixed(1)}</text>
+    ${points}
+  </svg>`;
+}
+
+// ===================== INIT (datos de ejemplo) =====================
+atletas.push({id:'a1', nombre:'Belén', apellido:'Serrano', documento:'38.221.909', deporte:'Pentathlón', sexo:'F', fnac:'2003-04-25', lateralidad:'Diestro'});
+evaluaciones.push({
+  id:'e_demo1', atletaId:'a1', fecha:'2025-05-10T09:30:00',
+  mediciones:{'basicas.peso_kg':'67.40','basicas.talla_cm':'174.4','basicas.talla_sentada_cm':'91.2','pliegues.tricipital':'9.2','pliegues.subescapular':'4.6','pliegues.supraespinal':'6.9','pliegues.abdominal':'13.1','pliegues.muslo_anterior':'8.4','pliegues.pierna_medial':'5.2','diametros.biestiloideo':'5.6','diametros.bicond_femur':'9.1','diametros.biep_humero':'6.6','perimetros.brazo_contraido':'29.8','perimetros.pierna':'34.9','generales.antropometrista':'Cardey','generales.lado_evaluado':'Derecho','generales.handgrip_derecho':'34.2','generales.handgrip_izquierdo':'31.8'}
+});
+evaluaciones.push({
+  id:'e_demo2', atletaId:'a1', fecha:'2025-11-28T09:38:00',
+  mediciones:{'basicas.peso_kg':'64.90','basicas.talla_cm':'174.4','basicas.talla_sentada_cm':'89.5','pliegues.tricipital':'7.6','pliegues.subescapular':'3.4','pliegues.supraespinal':'5.8','pliegues.abdominal':'11.4','pliegues.muslo_anterior':'7.2','pliegues.pierna_medial':'4.8','diametros.biestiloideo':'5.7','diametros.bicond_femur':'9.0','diametros.biep_humero':'6.7','perimetros.brazo_contraido':'30.5','perimetros.pierna':'35.4','generales.antropometrista':'Cardey','generales.lado_evaluado':'Derecho','generales.handgrip_derecho':'36.5','generales.handgrip_izquierdo':'32.9'}
+});
+renderAtletas();
+renderInformesSelectores();
+renderEvolutivoSelector();
+initBigData();
+</script>
+</body>
+</html>

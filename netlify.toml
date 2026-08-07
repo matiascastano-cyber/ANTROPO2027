@@ -1,0 +1,15 @@
+[build]
+  publish = "."
+  command = "echo 'Sitio estático — sin build step por ahora'"
+
+[build.environment]
+  # Estas dos se cargan desde Netlify (Site settings > Environment variables),
+  # NUNCA hardcodeadas en el repo. La anon key es pública por diseño en Supabase
+  # (la seguridad real la dan las políticas RLS, no el secreto de esta key).
+  SUPABASE_URL = ""
+  SUPABASE_ANON_KEY = ""
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
