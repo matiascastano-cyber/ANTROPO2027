@@ -221,16 +221,14 @@
       </div>
 
       <div class="card">
-        <h2>Nuevo deportista</h2>
+        <h2 id="titulo-form-atleta">Nuevo deportista</h2>
         <div class="field-grid">
           <div class="field"><label>Nombre</label><input id="f-nombre" type="text" placeholder="Belén"></div>
           <div class="field"><label>Apellido</label><input id="f-apellido" type="text" placeholder="Serrano"></div>
           <div class="field"><label>Documento</label><input id="f-documento" type="text" placeholder="40.123.456"></div>
           <div class="field"><label>Deporte</label>
-            <select id="f-deporte">
-              <option>Pentathlón</option><option>Fútbol</option><option>Handball</option>
-              <option>Natación</option><option>Atletismo</option><option>Rugby</option><option>Otro</option>
-            </select>
+            <input id="f-deporte" type="text" list="lista-deportes" placeholder="Escribí o elegí uno existente">
+            <datalist id="lista-deportes"></datalist>
           </div>
           <div class="field"><label>Sexo</label>
             <select id="f-sexo"><option value="F">Femenino</option><option value="M">Masculino</option></select>
@@ -241,6 +239,7 @@
           </div>
         </div>
         <div class="btn-row">
+          <button class="btn btn-ghost" id="btn-cancelar-edicion-atleta" style="display:none;">Cancelar edición</button>
           <button class="btn btn-ghost" id="btn-limpiar-atleta">Limpiar</button>
           <button class="btn btn-primary" id="btn-guardar-atleta">Guardar deportista</button>
         </div>
@@ -298,6 +297,10 @@
           <div class="field"><label>Evaluación</label><select id="inf-evaluacion" disabled><option value="">— Elegí un deportista primero —</option></select></div>
         </div>
         <div id="inf-cant-evaluaciones" style="margin-top:10px; font-size:12.5px; color:var(--mist);"></div>
+        <div class="btn-row" style="justify-content:flex-start; margin-top:6px;">
+          <button class="btn btn-ghost" id="btn-editar-evaluacion" disabled>Editar esta evaluación</button>
+          <button class="btn btn-ghost" id="btn-eliminar-evaluacion" disabled style="color:var(--danger); border-color:#e6c9c2;">Eliminar esta evaluación</button>
+        </div>
       </div>
 
       <div class="card">
@@ -335,12 +338,17 @@
         <p>Cruce de variables entre todos los deportistas evaluados, con filtros por año y deporte.</p>
       </div>
 
-      <div class="disclaimer">Datos de ejemplo (generados) para maquetar el módulo — se reemplazan por consultas reales a <code>resultados_calculados</code> cuando el backend esté conectado.</div>
+      <div class="disclaimer">Los valores de masa grasa/muscular provienen del modelo de 4 componentes (De Rose y Guimarães). Filtrá por año, deporte, sexo y edad para comparar subgrupos.</div>
 
       <div class="card">
-        <div class="field-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="field-grid" style="grid-template-columns:repeat(3,1fr);">
           <div class="field"><label>Año</label><select id="bd-anio"></select></div>
           <div class="field"><label>Deporte</label><select id="bd-deporte"></select></div>
+          <div class="field"><label>Sexo</label><select id="bd-sexo"><option value="">Todos</option><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
+        </div>
+        <div class="field-grid" style="grid-template-columns:1fr 1fr 1fr 1fr; margin-top:12px;">
+          <div class="field"><label>Edad desde</label><input type="number" id="bd-edad-desde" placeholder="—" min="0" max="99"></div>
+          <div class="field"><label>Edad hasta</label><input type="number" id="bd-edad-hasta" placeholder="—" min="0" max="99"></div>
           <div class="field"><label>Eje X</label><select id="bd-x"></select></div>
           <div class="field"><label>Eje Y</label><select id="bd-y"></select></div>
         </div>
@@ -471,22 +479,34 @@ async function cargarAtletas(){
   atletas.forEach(a => { a.deporte = deportesMap[a.deporte_id] || '—'; });
 }
 
+async function resolverDeporteId(nombreDeporte){
+  if(!nombreDeporte) return null;
+  const { data: existente } = await sb.from('deportes').select('id').eq('nombre', nombreDeporte).maybeSingle();
+  if(existente) return existente.id;
+  const { data: nuevo, error: errD } = await sb.from('deportes').insert({ nombre: nombreDeporte }).select('id').single();
+  if(errD){ console.error(errD); return null; }
+  return nuevo.id;
+}
+
 async function guardarAtletaEnSupabase(atleta){
-  let deporteId = null;
-  if(atleta.deporte){
-    const { data: existente } = await sb.from('deportes').select('id').eq('nombre', atleta.deporte).maybeSingle();
-    if(existente) deporteId = existente.id;
-    else {
-      const { data: nuevo, error: errD } = await sb.from('deportes').insert({ nombre: atleta.deporte }).select('id').single();
-      if(errD){ console.error(errD); } else { deporteId = nuevo.id; }
-    }
-  }
+  const deporteId = await resolverDeporteId(atleta.deporte);
   const { data, error } = await sb.from('atletas').insert({
     nombre: atleta.nombre, apellido: atleta.apellido, documento: atleta.documento || null,
     fecha_nacimiento: atleta.fnac || null, sexo: atleta.sexo, lateralidad: atleta.lateralidad,
     deporte_id: deporteId
   }).select().single();
   if(error){ console.error('Error guardando atleta:', error); showToast('Error guardando deportista: ' + error.message); return null; }
+  return { ...data, deporte: atleta.deporte };
+}
+
+async function actualizarAtletaEnSupabase(atletaId, atleta){
+  const deporteId = await resolverDeporteId(atleta.deporte);
+  const { data, error } = await sb.from('atletas').update({
+    nombre: atleta.nombre, apellido: atleta.apellido, documento: atleta.documento || null,
+    fecha_nacimiento: atleta.fnac || null, sexo: atleta.sexo, lateralidad: atleta.lateralidad,
+    deporte_id: deporteId
+  }).eq('id', atletaId).select().single();
+  if(error){ console.error('Error actualizando atleta:', error); showToast('Error actualizando deportista: ' + error.message); return null; }
   return { ...data, deporte: atleta.deporte };
 }
 
@@ -557,6 +577,50 @@ async function guardarEvaluacionEnSupabase(atletaId, mediciones){
   }
   return { id: evalNueva.id, atletaId, fecha: evalNueva.fecha_evaluacion, mediciones };
 }
+
+// Actualiza una evaluación existente: en vez de intentar un "upsert" campo por
+// campo (frágil), borra las mediciones/instrumental previos y los vuelve a
+// insertar con los valores nuevos. Es más simple y evita dejar residuos.
+async function actualizarEvaluacionEnSupabase(evalId, atletaId, mediciones){
+  const ladoEvaluado = mediciones['generales.lado_evaluado'] || null;
+  const antropometrista = mediciones['generales.antropometrista'] || null;
+
+  const { error: errEval } = await sb.from('evaluaciones').update({ lado_evaluado: ladoEvaluado }).eq('id', evalId);
+  if(errEval){ console.error('Error actualizando evaluación:', errEval); showToast('Error actualizando evaluación: ' + errEval.message); return null; }
+
+  await sb.from('instrumental_evaluacion').delete().eq('evaluacion_id', evalId);
+  if(antropometrista){
+    const { error: errInstr } = await sb.from('instrumental_evaluacion').insert({ evaluacion_id: evalId, antropometrista });
+    if(errInstr) console.error('Error guardando antropometrista:', errInstr);
+  }
+
+  const { error: errDelMed } = await sb.from('mediciones').delete().eq('evaluacion_id', evalId);
+  if(errDelMed){ console.error('Error borrando mediciones previas:', errDelMed); showToast('Error actualizando mediciones: ' + errDelMed.message); return null; }
+
+  const tipos = await cargarTiposMedicion();
+  const filas = [];
+  Object.entries(mediciones).forEach(([appCode, valor])=>{
+    if(valor === null || valor === undefined || valor === '') return;
+    const codigoDb = MAPA_MEDICIONES[appCode];
+    const tipoId = codigoDb ? tipos[codigoDb] : null;
+    if(!tipoId) return;
+    filas.push({ evaluacion_id: evalId, tipo_medicion_id: tipoId, medida_1: valor, valor_final: valor });
+  });
+  if(filas.length){
+    const { error: errIns } = await sb.from('mediciones').insert(filas);
+    if(errIns){ console.error('Error guardando mediciones:', errIns); showToast('Error guardando mediciones: ' + errIns.message); return null; }
+  }
+  return { id: evalId, atletaId, mediciones };
+}
+
+// Al eliminar la evaluación, mediciones/resultados_calculados/instrumental_evaluacion
+// se borran solos (ON DELETE CASCADE definido en el esquema).
+async function eliminarEvaluacionEnSupabase(evalId){
+  const { error } = await sb.from('evaluaciones').delete().eq('id', evalId);
+  if(error){ console.error('Error eliminando evaluación:', error); showToast('Error eliminando evaluación: ' + error.message); return false; }
+  return true;
+}
+
 let tabActual = 0;
 
 // ===================== DEFINICIÓN DE SOLAPAS Y VARIABLES =====================
@@ -618,19 +682,22 @@ function renderAtletas(){
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><b>${a.apellido}, ${a.nombre}</b></td><td>${a.deporte}</td><td>${a.sexo==='F'?'Femenino':'Masculino'}</td><td>${a.lateralidad||'—'}</td><td>${a.documento||'—'}</td>
       <td><span class="chip">${cantEval} evaluación${cantEval===1?'':'es'}</span></td>
-      <td><button class="link-btn" data-id="${a.id}">Cargar evaluación →</button></td>`;
+      <td style="white-space:nowrap;"><button class="link-btn" data-id="${a.id}">Cargar evaluación →</button> · <button class="link-btn" data-edit-id="${a.id}">Editar</button></td>`;
     tbody.appendChild(tr);
     const opt = document.createElement('option');
     opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre} — ${a.deporte}`;
     select.appendChild(opt);
   });
 
-  tbody.querySelectorAll('.link-btn').forEach(b=>{
+  tbody.querySelectorAll('.link-btn[data-id]').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelector('[data-view="view-evaluacion"]').click();
       document.getElementById('eval-atleta').value = b.dataset.id;
       seleccionarAtleta(b.dataset.id);
     });
+  });
+  tbody.querySelectorAll('.link-btn[data-edit-id]').forEach(b=>{
+    b.addEventListener('click', ()=>cargarAtletaParaEditar(b.dataset.editId));
   });
 
   if(typeof poblarSelectAtletas === 'function'){
@@ -639,30 +706,86 @@ function renderAtletas(){
   }
 }
 
+let atletaEditandoId = null;
+
+function poblarDatalistDeportes(){
+  const dl = document.getElementById('lista-deportes');
+  const deportesUnicos = [...new Set(atletas.map(a=>a.deporte).filter(d=>d && d!=='—'))].sort();
+  dl.innerHTML = deportesUnicos.map(d=>`<option value="${d}"></option>`).join('');
+}
+
+function limpiarFormularioAtleta(){
+  ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-deporte').value = '';
+  document.getElementById('f-sexo').value = 'F';
+  document.getElementById('f-lateralidad').value = 'Diestro';
+}
+
+function cargarAtletaParaEditar(atletaId){
+  const a = atletas.find(x=>x.id===atletaId);
+  if(!a) return;
+  atletaEditandoId = atletaId;
+  document.getElementById('f-nombre').value = a.nombre || '';
+  document.getElementById('f-apellido').value = a.apellido || '';
+  document.getElementById('f-documento').value = a.documento || '';
+  document.getElementById('f-deporte').value = (a.deporte && a.deporte!=='—') ? a.deporte : '';
+  document.getElementById('f-sexo').value = a.sexo || 'F';
+  document.getElementById('f-fnac').value = a.fnac || '';
+  document.getElementById('f-lateralidad').value = a.lateralidad || 'Diestro';
+  document.getElementById('titulo-form-atleta').textContent = `Editando: ${a.apellido}, ${a.nombre}`;
+  document.getElementById('btn-guardar-atleta').textContent = 'Actualizar deportista';
+  document.getElementById('btn-cancelar-edicion-atleta').style.display = 'inline-block';
+  document.querySelector('[data-view="view-atletas"]').click();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function cancelarEdicionAtleta(){
+  atletaEditandoId = null;
+  limpiarFormularioAtleta();
+  document.getElementById('titulo-form-atleta').textContent = 'Nuevo deportista';
+  document.getElementById('btn-guardar-atleta').textContent = 'Guardar deportista';
+  document.getElementById('btn-cancelar-edicion-atleta').style.display = 'none';
+}
+
 document.getElementById('btn-guardar-atleta').addEventListener('click', async ()=>{
   const nombre = document.getElementById('f-nombre').value.trim();
   const apellido = document.getElementById('f-apellido').value.trim();
   if(!nombre || !apellido){ showToast('Nombre y apellido son obligatorios'); return; }
   const btn = document.getElementById('btn-guardar-atleta');
+  const textoOriginal = btn.textContent;
   btn.textContent = 'Guardando...'; btn.style.opacity = '0.6';
-  const nuevo = await guardarAtletaEnSupabase({
+  const datos = {
     nombre, apellido,
     documento: document.getElementById('f-documento').value.trim(),
-    deporte: document.getElementById('f-deporte').value,
+    deporte: document.getElementById('f-deporte').value.trim(),
     sexo: document.getElementById('f-sexo').value,
     fnac: document.getElementById('f-fnac').value,
     lateralidad: document.getElementById('f-lateralidad').value
-  });
-  btn.textContent = 'Guardar deportista'; btn.style.opacity = '1';
-  if(!nuevo) return; // el error ya se mostró en guardarAtletaEnSupabase
-  atletas.push(nuevo);
-  ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
-  renderAtletas();
-  showToast(`${nombre} ${apellido} guardado/a correctamente`);
+  };
+
+  if(atletaEditandoId){
+    const actualizado = await actualizarAtletaEnSupabase(atletaEditandoId, datos);
+    btn.textContent = textoOriginal; btn.style.opacity = '1';
+    if(!actualizado) return;
+    const idx = atletas.findIndex(a=>a.id===atletaEditandoId);
+    if(idx>=0) atletas[idx] = actualizado;
+    cancelarEdicionAtleta();
+    renderAtletas();
+    poblarDatalistDeportes();
+    showToast(`${nombre} ${apellido} actualizado/a correctamente`);
+  } else {
+    const nuevo = await guardarAtletaEnSupabase(datos);
+    btn.textContent = textoOriginal; btn.style.opacity = '1';
+    if(!nuevo) return;
+    atletas.push(nuevo);
+    limpiarFormularioAtleta();
+    renderAtletas();
+    poblarDatalistDeportes();
+    showToast(`${nombre} ${apellido} guardado/a correctamente`);
+  }
 });
-document.getElementById('btn-limpiar-atleta').addEventListener('click', ()=>{
-  ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
-});
+document.getElementById('btn-limpiar-atleta').addEventListener('click', cancelarEdicionAtleta);
+document.getElementById('btn-cancelar-edicion-atleta').addEventListener('click', cancelarEdicionAtleta);
 
 // ===================== INGRESO DE MEDICIONES =====================
 function buildTabs(){
@@ -743,6 +866,8 @@ document.getElementById('btn-tab-next').addEventListener('click', ()=>irATab(tab
 
 function seleccionarAtleta(id){
   atletaSeleccionadoId = id || null;
+  evaluacionEditandoId = null;
+  document.getElementById('btn-guardar-evaluacion').textContent = 'Guardar evaluación';
   const form = document.getElementById('eval-form');
   const notice = document.getElementById('eval-sin-atleta');
   if(atletaSeleccionadoId){
@@ -776,6 +901,22 @@ document.getElementById('btn-guardar-evaluacion').addEventListener('click', asyn
   });
 
   const btn = document.getElementById('btn-guardar-evaluacion');
+
+  if(evaluacionEditandoId){
+    btn.textContent = 'Actualizando...'; btn.style.opacity = '0.6';
+    const actualizada = await actualizarEvaluacionEnSupabase(evaluacionEditandoId, atletaSeleccionadoId, mediciones);
+    btn.textContent = 'Guardar evaluación'; btn.style.opacity = '1';
+    if(!actualizada) return;
+    const idx = evaluaciones.findIndex(e=>e.id===evaluacionEditandoId);
+    if(idx>=0) evaluaciones[idx] = { ...evaluaciones[idx], mediciones };
+    evaluacionEditandoId = null;
+    renderAtletas();
+    if(document.getElementById('inf-atleta').value === atletaSeleccionadoId) document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
+    if(document.getElementById('evo-atleta').value === atletaSeleccionadoId) renderEvolutivo(atletaSeleccionadoId);
+    showToast('Evaluación actualizada correctamente');
+    return;
+  }
+
   btn.textContent = 'Guardando...'; btn.style.opacity = '0.6';
   const nueva = await guardarEvaluacionEnSupabase(atletaSeleccionadoId, mediciones);
   btn.textContent = 'Guardar evaluación'; btn.style.opacity = '1';
@@ -786,6 +927,56 @@ document.getElementById('btn-guardar-evaluacion').addEventListener('click', asyn
   if(document.getElementById('inf-atleta').value === atletaSeleccionadoId) document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
   if(document.getElementById('evo-atleta').value === atletaSeleccionadoId) renderEvolutivo(atletaSeleccionadoId);
   showToast('Evaluación guardada correctamente');
+});
+
+// ===================== EDITAR / ELIMINAR EVALUACIÓN (desde Informes) =====================
+let evaluacionEditandoId = null;
+
+document.getElementById('btn-editar-evaluacion').addEventListener('click', ()=>{
+  const atletaId = document.getElementById('inf-atleta').value;
+  const evalId = document.getElementById('inf-evaluacion').value;
+  if(!atletaId || !evalId) return;
+  const ev = evaluaciones.find(e=>e.id===evalId);
+  if(!ev) return;
+
+  document.querySelector('[data-view="view-evaluacion"]').click();
+  document.getElementById('eval-atleta').value = atletaId;
+  seleccionarAtleta(atletaId); // arma el formulario en blanco (esto resetea evaluacionEditandoId, por eso lo seteamos después)
+  evaluacionEditandoId = evalId;
+
+  document.querySelectorAll('#tabpanels input').forEach(inp=>{
+    const clave = `${inp.dataset.sec}.${inp.dataset.code}`;
+    const valor = ev.mediciones[clave];
+    if(inp.type === 'radio'){
+      if(valor !== undefined) inp.checked = (inp.value === valor);
+    } else if(valor !== undefined && valor !== null && valor !== ''){
+      inp.value = valor;
+      inp.classList.add('filled');
+    }
+  });
+  updateCounts();
+  document.getElementById('btn-guardar-evaluacion').textContent = 'Actualizar evaluación';
+  showToast('Editando evaluación — corregí los valores y guardá');
+});
+
+document.getElementById('btn-eliminar-evaluacion').addEventListener('click', async ()=>{
+  const atletaId = document.getElementById('inf-atleta').value;
+  const evalId = document.getElementById('inf-evaluacion').value;
+  if(!atletaId || !evalId) return;
+  const fechaTexto = document.getElementById('inf-evaluacion').selectedOptions[0]?.textContent || '';
+  if(!confirm(`¿Eliminar esta evaluación (${fechaTexto})? Esta acción no se puede deshacer.`)) return;
+
+  const btn = document.getElementById('btn-eliminar-evaluacion');
+  btn.textContent = 'Eliminando...'; btn.disabled = true;
+  const ok = await eliminarEvaluacionEnSupabase(evalId);
+  btn.textContent = 'Eliminar esta evaluación';
+  if(!ok) { btn.disabled = false; return; }
+
+  evaluaciones = evaluaciones.filter(e=>e.id!==evalId);
+  renderAtletas();
+  await cargarYRenderInforme(atletaId);
+  renderEvolutivo(atletaId);
+  showToast('Evaluación eliminada');
 });
 
 // ===================== TOAST =====================
@@ -912,6 +1103,7 @@ async function cargarYRenderInforme(atletaId){
   if(!atletaId){
     evalSel.innerHTML = '<option value="">— Elegí un deportista primero —</option>'; evalSel.disabled = true;
     document.getElementById('inf-contenido').innerHTML=''; contador.textContent = '';
+    actualizarBotonesEvaluacion();
     return;
   }
   evalSel.innerHTML = '<option>Cargando...</option>'; evalSel.disabled = true;
@@ -924,6 +1116,7 @@ async function cargarYRenderInforme(atletaId){
   if(evs.length===0){
     evalSel.innerHTML = '<option value="">Sin evaluaciones cargadas</option>';
     evalSel.disabled = true;
+    actualizarBotonesEvaluacion();
     return;
   }
   evalSel.disabled = false;
@@ -933,6 +1126,7 @@ async function cargarYRenderInforme(atletaId){
     evalSel.appendChild(opt);
   });
   renderInforme(evs[0].id, atletaId);
+  actualizarBotonesEvaluacion();
 }
 
 document.getElementById('inf-deporte').addEventListener('change', e=>{
@@ -947,7 +1141,14 @@ document.getElementById('inf-atleta').addEventListener('change', async e=>{
 });
 document.getElementById('inf-evaluacion').addEventListener('change', e=>{
   renderInforme(e.target.value, document.getElementById('inf-atleta').value);
+  actualizarBotonesEvaluacion();
 });
+
+function actualizarBotonesEvaluacion(){
+  const hay = !!document.getElementById('inf-evaluacion').value;
+  document.getElementById('btn-editar-evaluacion').disabled = !hay;
+  document.getElementById('btn-eliminar-evaluacion').disabled = !hay;
+}
 
 // Somatotipo (Heath-Carter, 1975) — fórmulas reales:
 // Endomorfia: desde la suma de tricipital+subescapular+supraespinal, corregida por talla.
@@ -1492,21 +1693,38 @@ async function initBigData(){
   selX.innerHTML = opts; selY.innerHTML = opts;
   selX.value = 'peso'; selY.value = 'grasa4c_kg';
 
-  [selAnio, selDeporte, selX, selY].forEach(el=>el.addEventListener('change', renderBigData));
+  const selSexo = document.getElementById('bd-sexo');
+  const inpEdadDesde = document.getElementById('bd-edad-desde');
+  const inpEdadHasta = document.getElementById('bd-edad-hasta');
+
+  [selAnio, selDeporte, selSexo, selX, selY].forEach(el=>el.addEventListener('change', renderBigData));
+  [inpEdadDesde, inpEdadHasta].forEach(el=>el.addEventListener('input', renderBigData));
   renderBigData();
 }
 
 function renderBigData(){
   const anio = document.getElementById('bd-anio').value;
   const deporte = document.getElementById('bd-deporte').value;
+  const sexo = document.getElementById('bd-sexo').value;
+  const edadDesde = document.getElementById('bd-edad-desde').value;
+  const edadHasta = document.getElementById('bd-edad-hasta').value;
   const xKey = document.getElementById('bd-x').value;
   const yKey = document.getElementById('bd-y').value;
   const xLabel = BD_VARS.find(v=>v.key===xKey).label;
   const yLabel = BD_VARS.find(v=>v.key===yKey).label;
 
+  const atletasPorId = Object.fromEntries(atletas.map(a=>[a.id, a]));
+
   let filtrado = BD_DATA.filter(d => d[xKey]!==null && d[xKey]!==undefined && d[yKey]!==null && d[yKey]!==undefined);
   if(anio) filtrado = filtrado.filter(d=>String(d.anio)===anio);
   if(deporte) filtrado = filtrado.filter(d=>d.deporte===deporte);
+  if(sexo) filtrado = filtrado.filter(d=>d.sexo===sexo);
+  if(edadDesde) filtrado = filtrado.filter(d=>d.edad!==null && d.edad!==undefined && d.edad>=Number(edadDesde));
+  if(edadHasta) filtrado = filtrado.filter(d=>d.edad!==null && d.edad!==undefined && d.edad<=Number(edadHasta));
+  filtrado = filtrado.map(d=>{
+    const a = atletasPorId[d.atleta_id];
+    return { ...d, apellido: a ? `${a.apellido}, ${a.nombre}` : 'Deportista desconocido' };
+  });
 
   document.getElementById('bd-titulo').textContent = `${yLabel}  vs.  ${xLabel}  (${filtrado.length} evaluaciones)`;
   document.getElementById('bd-chart').innerHTML = svgScatter(filtrado, xKey, yKey, xLabel, yLabel);
@@ -1519,22 +1737,25 @@ function renderBigData(){
 
 function svgScatter(data, xKey, yKey, xLabel, yLabel){
   if(data.length===0) return `<div class="evo-empty">No hay deportistas para este filtro.</div>`;
-  const w=760, h=420, padL=54, padR=20, padT=16, padB=44;
+  const w=760, h=420, padL=60, padR=20, padT=16, padB=44;
   const xs = data.map(d=>d[xKey]), ys = data.map(d=>d[yKey]);
   const xMin=Math.min(...xs), xMax=Math.max(...xs), xRange=(xMax-xMin)||1;
   const yMin=Math.min(...ys), yMax=Math.max(...ys), yRange=(yMax-yMin)||1;
   const xFor = v => padL + (w-padL-padR) * (v-xMin)/xRange;
   const yFor = v => padT + (h-padT-padB) * (1-(v-yMin)/yRange);
+  const yLabelCorto = yLabel.split(' (')[0]; // ej: "Masa Grasa (4C — ..., kg)" -> "Masa Grasa"
 
   const gridLines = [0,0.25,0.5,0.75,1].map(f=>{
     const y = padT + (h-padT-padB)*f;
     return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eef0f3"/>`;
   }).join('');
 
+  const escXml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const points = data.map(d=>{
     const cx=xFor(d[xKey]).toFixed(1), cy=yFor(d[yKey]).toFixed(1);
+    const nombre = d.apellido ? escXml(d.apellido) + '\n' : '';
     return `<circle cx="${cx}" cy="${cy}" r="5" fill="${BD_COLORES[d.deporte]}" fill-opacity="0.78" stroke="#fff" stroke-width="1">
-      <title>${d.deporte} — ${d.anio}\n${xLabel}: ${d[xKey]}\n${yLabel}: ${d[yKey]}</title>
+      <title>${nombre}${d.deporte} — ${d.anio}\n${xLabel}: ${d[xKey]}\n${yLabel}: ${d[yKey]}</title>
     </circle>`;
   }).join('');
 
@@ -1543,11 +1764,11 @@ function svgScatter(data, xKey, yKey, xLabel, yLabel){
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ccd4"/>
     <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ccd4"/>
     <text x="${(padL+w-padR)/2}" y="${h-8}" text-anchor="middle" class="evo-point-label">${xLabel}</text>
-    <text x="14" y="${(padT+h-padB)/2}" text-anchor="middle" class="evo-point-label" transform="rotate(-90 14 ${(padT+h-padB)/2})">${yLabel}</text>
+    <text x="16" y="${(padT+h-padB)/2}" text-anchor="middle" dominant-baseline="middle" class="evo-point-label" transform="rotate(-90 16 ${(padT+h-padB)/2})">${yLabelCorto}</text>
     <text x="${padL}" y="${h-padB+16}" class="evo-point-label">${xMin.toFixed(1)}</text>
     <text x="${w-padR}" y="${h-padB+16}" text-anchor="end" class="evo-point-label">${xMax.toFixed(1)}</text>
-    <text x="${padL-6}" y="${padT+4}" text-anchor="end" class="evo-point-label">${yMax.toFixed(1)}</text>
-    <text x="${padL-6}" y="${h-padB}" text-anchor="end" class="evo-point-label">${yMin.toFixed(1)}</text>
+    <text x="${padL-8}" y="${padT+4}" text-anchor="end" class="evo-point-label">${yMax.toFixed(1)}</text>
+    <text x="${padL-8}" y="${h-padB}" text-anchor="end" class="evo-point-label">${yMin.toFixed(1)}</text>
     ${points}
   </svg>`;
 }
@@ -1558,6 +1779,7 @@ async function iniciarApp(){
   await cargarAtletas();
   document.querySelector('#tabla-atletas').closest('.card').querySelector('h2').textContent = 'Deportistas registrados';
   renderAtletas();
+  poblarDatalistDeportes();
   renderInformesSelectores();
   renderEvolutivoSelector();
   initBigData(); // esta arranca su propia carga (paginada) para el scatter
