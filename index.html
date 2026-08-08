@@ -292,10 +292,12 @@
       </div>
 
       <div class="card">
-        <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="field-grid" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="field"><label>Deporte</label><select id="inf-deporte"><option value="">Todos los deportes</option></select></div>
           <div class="field"><label>Deportista</label><select id="inf-atleta"><option value="">— Seleccioná —</option></select></div>
           <div class="field"><label>Evaluación</label><select id="inf-evaluacion" disabled><option value="">— Elegí un deportista primero —</option></select></div>
         </div>
+        <div id="inf-cant-evaluaciones" style="margin-top:10px; font-size:12.5px; color:var(--mist);"></div>
       </div>
 
       <div class="card">
@@ -445,9 +447,17 @@ let atletaSeleccionadoId = null;
 
 // --- Atletas ---
 async function cargarAtletas(){
-  const { data, error } = await sb.from('atletas').select('*').order('apellido');
-  if(error){ console.error('Error cargando atletas:', error); showToast('Error cargando deportistas'); return; }
-  atletas = data.map(a => ({
+  let todos = [];
+  let desde = 0;
+  const TAM_PAGINA = 1000;
+  while(true){
+    const { data, error } = await sb.from('atletas').select('*').order('apellido').range(desde, desde + TAM_PAGINA - 1);
+    if(error){ console.error('Error cargando atletas:', error); showToast('Error cargando deportistas'); return; }
+    todos = todos.concat(data);
+    if(data.length < TAM_PAGINA) break;
+    desde += TAM_PAGINA;
+  }
+  atletas = todos.map(a => ({
     id: a.id, nombre: a.nombre, apellido: a.apellido, documento: a.documento,
     deporte: null, deporte_id: a.deporte_id, sexo: a.sexo, fnac: a.fecha_nacimiento,
     lateralidad: a.lateralidad
@@ -621,7 +631,7 @@ function renderAtletas(){
   });
 
   if(typeof poblarSelectAtletas === 'function'){
-    poblarSelectAtletas('inf-atleta');
+    poblarSelectAtletas('inf-atleta', document.getElementById('inf-deporte') ? document.getElementById('inf-deporte').value : '');
     poblarSelectAtletas('evo-atleta');
   }
 }
@@ -839,30 +849,50 @@ function calcularFraccionamiento(evaluacion, atleta){
   return r;
 }
 
-function poblarSelectAtletas(selectId){
+function poblarSelectAtletas(selectId, deporteFiltro){
   const sel = document.getElementById(selectId);
   const actual = sel.value;
   sel.innerHTML = '<option value="">— Seleccioná —</option>';
-  atletas.forEach(a=>{
+  const lista = deporteFiltro ? atletas.filter(a=>a.deporte===deporteFiltro) : atletas;
+  lista.forEach(a=>{
     const opt = document.createElement('option');
     opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre}`;
     sel.appendChild(opt);
   });
-  if(actual) sel.value = actual;
+  if(actual && lista.some(a=>a.id===actual)) sel.value = actual;
+}
+
+function poblarSelectDeportes(selectId){
+  const sel = document.getElementById(selectId);
+  const deportesUnicos = [...new Set(atletas.map(a=>a.deporte).filter(d=>d && d!=='—'))].sort();
+  sel.innerHTML = '<option value="">Todos los deportes</option>' + deportesUnicos.map(d=>`<option value="${d}">${d}</option>`).join('');
 }
 
 function renderInformesSelectores(){
+  poblarSelectDeportes('inf-deporte');
   poblarSelectAtletas('inf-atleta');
 }
 
+document.getElementById('inf-deporte').addEventListener('change', e=>{
+  poblarSelectAtletas('inf-atleta', e.target.value);
+  document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
+});
+
 document.getElementById('inf-atleta').addEventListener('change', async e=>{
   const evalSel = document.getElementById('inf-evaluacion');
-  if(!e.target.value){ evalSel.innerHTML = '<option value="">— Elegí un deportista primero —</option>'; evalSel.disabled = true; document.getElementById('inf-contenido').innerHTML=''; return; }
+  const contador = document.getElementById('inf-cant-evaluaciones');
+  if(!e.target.value){
+    evalSel.innerHTML = '<option value="">— Elegí un deportista primero —</option>'; evalSel.disabled = true;
+    document.getElementById('inf-contenido').innerHTML=''; contador.textContent = '';
+    return;
+  }
   evalSel.innerHTML = '<option>Cargando...</option>'; evalSel.disabled = true;
+  contador.textContent = 'Cargando evaluaciones...';
   await cargarEvaluacionesDeAtleta(e.target.value);
   const evs = evaluaciones.filter(ev=>ev.atletaId===e.target.value).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   evalSel.innerHTML = '';
   document.getElementById('inf-contenido').innerHTML = '';
+  contador.textContent = `${evs.length} evaluación${evs.length===1?'':'es'} cargada${evs.length===1?'':'s'} para este deportista.`;
   if(evs.length===0){
     evalSel.innerHTML = '<option value="">Sin evaluaciones cargadas</option>';
     evalSel.disabled = true;
@@ -1192,7 +1222,61 @@ function valorEvoChart(p, key){
   return p[key];
 }
 
-function construirEvolutivoHTML(atletaId){
+async function cargarComparativaDeporte(deporte){
+  if(!deporte || deporte==='—') return [];
+  let todos = [];
+  let desde = 0;
+  const TAM_PAGINA = 1000;
+  while(true){
+    const { data, error } = await sb.from('vista_bigdata').select('*').eq('deporte', deporte).range(desde, desde + TAM_PAGINA - 1);
+    if(error){ console.error('Error cargando comparativa de deporte:', error); break; }
+    todos = todos.concat(data);
+    if(data.length < TAM_PAGINA) break;
+    desde += TAM_PAGINA;
+  }
+  return todos;
+}
+
+function svgScatterComparativo(fondo, destacados, xKey, yKey, xLabel, yLabel){
+  const todos = fondo.concat(destacados);
+  if(todos.length===0) return `<div class="evo-empty">No hay datos suficientes del deporte para comparar.</div>`;
+  const w=700, h=380, padL=54, padR=20, padT=16, padB=44;
+  const xs = todos.map(d=>d[xKey]), ys = todos.map(d=>d[yKey]);
+  const xMin=Math.min(...xs), xMax=Math.max(...xs), xRange=(xMax-xMin)||1;
+  const yMin=Math.min(...ys), yMax=Math.max(...ys), yRange=(yMax-yMin)||1;
+  const xFor = v => padL + (w-padL-padR) * (v-xMin)/xRange;
+  const yFor = v => padT + (h-padT-padB) * (1-(v-yMin)/yRange);
+
+  const gridLines = [0,0.25,0.5,0.75,1].map(f=>{
+    const y = padT + (h-padT-padB)*f;
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="#eef0f3"/>`;
+  }).join('');
+
+  const puntosFondo = fondo.map(d=>
+    `<circle cx="${xFor(d[xKey]).toFixed(1)}" cy="${yFor(d[yKey]).toFixed(1)}" r="4" fill="#b7bfc9" fill-opacity="0.55"/>`
+  ).join('');
+  const puntosDestacados = destacados.map(d=>
+    `<circle cx="${xFor(d[xKey]).toFixed(1)}" cy="${yFor(d[yKey]).toFixed(1)}" r="7" fill="#0d9488" stroke="#04241f" stroke-width="1.5">
+      <title>${xLabel}: ${d[xKey].toFixed(1)}\n${yLabel}: ${d[yKey].toFixed(1)}</title>
+    </circle>`
+  ).join('');
+
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}">
+    ${gridLines}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="#c7ccd4"/>
+    <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="#c7ccd4"/>
+    <text x="${(padL+w-padR)/2}" y="${h-8}" text-anchor="middle" class="evo-point-label">${xLabel}</text>
+    <text x="14" y="${(padT+h-padB)/2}" text-anchor="middle" class="evo-point-label" transform="rotate(-90 14 ${(padT+h-padB)/2})">${yLabel}</text>
+    ${puntosFondo}
+    ${puntosDestacados}
+  </svg>
+  <div style="display:flex; gap:16px; margin-top:10px; font-size:12.5px;">
+    <div style="display:flex;align-items:center;gap:7px;"><span style="width:11px;height:11px;border-radius:50%;background:#b7bfc9;display:inline-block;"></span>Resto del deporte</div>
+    <div style="display:flex;align-items:center;gap:7px;"><span style="width:11px;height:11px;border-radius:50%;background:#0d9488;display:inline-block;"></span>Este deportista</div>
+  </div>`;
+}
+
+async function construirEvolutivoHTML(atletaId){
   const atleta = atletas.find(a=>a.id===atletaId);
   if(!atleta) return '';
   const evs = evaluaciones.filter(ev=>ev.atletaId===atletaId).sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
@@ -1204,11 +1288,32 @@ function construirEvolutivoHTML(atletaId){
   }));
   const conPeso = puntos.filter(p=>p.peso!==null);
 
-  if(conPeso.length < 2){
-    return `<div class="card"><div class="evo-empty">Necesitás al menos 2 evaluaciones con peso cargado para ver la evolución de ${atleta.nombre} ${atleta.apellido}.</div></div>`;
+  let html = '';
+
+  // --- Comparativa con el resto del deporte (requiere solo 1 evaluación) ---
+  if(atleta.deporte && atleta.deporte!=='—'){
+    const comparativa = await cargarComparativaDeporte(atleta.deporte);
+    const propios = comparativa.filter(d=>d.atleta_id===atletaId);
+    const fondo = comparativa.filter(d=>d.atleta_id!==atletaId && d.peso!==null && d.talla!==null);
+
+    const fondoPesoTalla = fondo.filter(d=>d.peso!==null && d.talla!==null);
+    const propiosPesoTalla = propios.filter(d=>d.peso!==null && d.talla!==null);
+    html += `<div class="card"><h2>Peso vs. Talla — comparado con ${atleta.deporte}</h2>${svgScatterComparativo(fondoPesoTalla, propiosPesoTalla, 'peso','talla','Peso (kg)','Talla (cm)')}</div>`;
+
+    const conPorcentajes = arr => arr
+      .filter(d=>d.peso && d.grasa4c_kg!==null && d.muscular4c_kg!==null)
+      .map(d=>({ ...d, pctGrasa: d.grasa4c_kg/d.peso*100, pctMuscular: d.muscular4c_kg/d.peso*100 }));
+    const fondoPct = conPorcentajes(fondo);
+    const propiosPct = conPorcentajes(propios);
+    html += `<div class="card"><h2>% Masa Grasa vs. % Masa Muscular (4C) — comparado con ${atleta.deporte}</h2>${svgScatterComparativo(fondoPct, propiosPct, 'pctGrasa','pctMuscular','% Masa Grasa','% Masa Muscular')}</div>`;
   }
 
-  let html = `<div class="disclaimer">Los valores de 4 y 5 componentes comparten hoy el mismo cálculo de masa grasa/muscular — van a diferir cuando conectemos la tabla de Withers y el método Phantom completo de Kerr.</div>`;
+  if(conPeso.length < 2){
+    html += `<div class="card"><div class="evo-empty">Necesitás al menos 2 evaluaciones con peso cargado para ver la evolución en el tiempo de ${atleta.nombre} ${atleta.apellido}.</div></div>`;
+    return html;
+  }
+
+  html += `<div class="disclaimer">Los valores de 4 y 5 componentes comparten hoy el mismo cálculo de masa grasa/muscular — van a diferir cuando conectemos la tabla de Withers y el método Phantom completo de Kerr.</div>`;
 
   EVO_CHARTS.forEach(cfg=>{
     const serie = puntos
@@ -1228,7 +1333,7 @@ async function renderEvolutivo(atletaId){
   if(!atletaId){ cont.innerHTML = ''; return; }
   cont.innerHTML = `<div class="card"><div class="evo-empty">Cargando evaluaciones...</div></div>`;
   await cargarEvaluacionesDeAtleta(atletaId);
-  cont.innerHTML = construirEvolutivoHTML(atletaId);
+  cont.innerHTML = await construirEvolutivoHTML(atletaId);
 }
 
 function svgLineChart(valores, fechas, color){
@@ -1299,7 +1404,7 @@ function imprimirElementoPadre(btn){
 }
 
 // ===================== IMPRESIÓN COMBINADA =====================
-document.getElementById('btn-imprimir-todo').addEventListener('click', ()=>{
+document.getElementById('btn-imprimir-todo').addEventListener('click', async ()=>{
   const atletaId = document.getElementById('inf-atleta').value;
   const evalId = document.getElementById('inf-evaluacion').value;
   if(!atletaId || !evalId){ showToast('Elegí deportista y evaluación primero'); return; }
@@ -1316,7 +1421,7 @@ document.getElementById('btn-imprimir-todo').addEventListener('click', ()=>{
   let html = '';
   if(incluir4c) html += hoja4C(ev, atleta, r);
   if(incluir5c) html += hoja5C(ev, atleta, r);
-  if(incluirEvo) html += `<div class="hoja">${construirEvolutivoHTML(atletaId)}</div>`;
+  if(incluirEvo) html += `<div class="hoja">${await construirEvolutivoHTML(atletaId)}</div>`;
 
   document.getElementById('print-area').innerHTML = html;
   window.print();
