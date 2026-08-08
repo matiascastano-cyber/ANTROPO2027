@@ -319,7 +319,10 @@
       </div>
 
       <div class="card">
-        <div class="field"><label>Deportista</label><select id="evo-atleta"><option value="">— Seleccioná —</option></select></div>
+        <div class="field-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="field"><label>Deporte</label><select id="evo-deporte"><option value="">Todos los deportes</option></select></div>
+          <div class="field"><label>Deportista</label><select id="evo-atleta"><option value="">— Seleccioná —</option></select></div>
+        </div>
       </div>
 
       <div id="evo-contenido"></div>
@@ -632,7 +635,7 @@ function renderAtletas(){
 
   if(typeof poblarSelectAtletas === 'function'){
     poblarSelectAtletas('inf-atleta', document.getElementById('inf-deporte') ? document.getElementById('inf-deporte').value : '');
-    poblarSelectAtletas('evo-atleta');
+    poblarSelectAtletas('evo-atleta', document.getElementById('evo-deporte') ? document.getElementById('evo-deporte').value : '');
   }
 }
 
@@ -868,28 +871,53 @@ function poblarSelectDeportes(selectId){
   sel.innerHTML = '<option value="">Todos los deportes</option>' + deportesUnicos.map(d=>`<option value="${d}">${d}</option>`).join('');
 }
 
+function poblarSelectDeportes(selectId){
+  const sel = document.getElementById(selectId);
+  const actual = sel.value;
+  const deportesUnicos = [...new Set(atletas.map(a=>a.deporte).filter(d=>d && d!=='—'))].sort();
+  sel.innerHTML = '<option value="">Todos los deportes</option>' + deportesUnicos.map(d=>`<option value="${d}">${d}</option>`).join('');
+  if(deportesUnicos.includes(actual)) sel.value = actual;
+}
+
 function renderInformesSelectores(){
   poblarSelectDeportes('inf-deporte');
   poblarSelectAtletas('inf-atleta');
 }
 
-document.getElementById('inf-deporte').addEventListener('change', e=>{
-  poblarSelectAtletas('inf-atleta', e.target.value);
-  document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
-});
+// Mantiene sincronizados los selectores de Informes y Evolutivo: elegir un
+// deporte/deportista en cualquiera de las dos solapas actualiza la otra.
+let sincronizandoSelectores = false;
+function sincronizarSelectores(origen, atletaId){
+  if(sincronizandoSelectores) return;
+  sincronizandoSelectores = true;
+  const atleta = atletas.find(a=>a.id===atletaId);
+  const deporte = atleta ? atleta.deporte : '';
 
-document.getElementById('inf-atleta').addEventListener('change', async e=>{
+  if(origen !== 'inf'){
+    poblarSelectAtletas('inf-atleta', deporte);
+    document.getElementById('inf-deporte').value = deporte || '';
+    document.getElementById('inf-atleta').value = atletaId || '';
+  }
+  if(origen !== 'evo'){
+    poblarSelectAtletas('evo-atleta', deporte);
+    document.getElementById('evo-deporte').value = deporte || '';
+    document.getElementById('evo-atleta').value = atletaId || '';
+  }
+  sincronizandoSelectores = false;
+}
+
+async function cargarYRenderInforme(atletaId){
   const evalSel = document.getElementById('inf-evaluacion');
   const contador = document.getElementById('inf-cant-evaluaciones');
-  if(!e.target.value){
+  if(!atletaId){
     evalSel.innerHTML = '<option value="">— Elegí un deportista primero —</option>'; evalSel.disabled = true;
     document.getElementById('inf-contenido').innerHTML=''; contador.textContent = '';
     return;
   }
   evalSel.innerHTML = '<option>Cargando...</option>'; evalSel.disabled = true;
   contador.textContent = 'Cargando evaluaciones...';
-  await cargarEvaluacionesDeAtleta(e.target.value);
-  const evs = evaluaciones.filter(ev=>ev.atletaId===e.target.value).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  await cargarEvaluacionesDeAtleta(atletaId);
+  const evs = evaluaciones.filter(ev=>ev.atletaId===atletaId).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   evalSel.innerHTML = '';
   document.getElementById('inf-contenido').innerHTML = '';
   contador.textContent = `${evs.length} evaluación${evs.length===1?'':'es'} cargada${evs.length===1?'':'s'} para este deportista.`;
@@ -904,7 +932,18 @@ document.getElementById('inf-atleta').addEventListener('change', async e=>{
     opt.value = ev.id; opt.textContent = new Date(ev.fecha).toLocaleString('es-AR');
     evalSel.appendChild(opt);
   });
-  renderInforme(evs[0].id, e.target.value);
+  renderInforme(evs[0].id, atletaId);
+}
+
+document.getElementById('inf-deporte').addEventListener('change', e=>{
+  poblarSelectAtletas('inf-atleta', e.target.value);
+  document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
+});
+
+document.getElementById('inf-atleta').addEventListener('change', async e=>{
+  sincronizarSelectores('inf', e.target.value);
+  await cargarYRenderInforme(e.target.value);
+  if(e.target.value) renderEvolutivo(e.target.value); // mantiene Evolutivo al día aunque no se esté viendo
 });
 document.getElementById('inf-evaluacion').addEventListener('change', e=>{
   renderInforme(e.target.value, document.getElementById('inf-atleta').value);
@@ -1200,10 +1239,20 @@ function hoja5C(ev, atleta, r){
 
 // ===================== EVOLUTIVO =====================
 function renderEvolutivoSelector(){
+  poblarSelectDeportes('evo-deporte');
   poblarSelectAtletas('evo-atleta');
 }
 
-document.getElementById('evo-atleta').addEventListener('change', e=>renderEvolutivo(e.target.value));
+document.getElementById('evo-deporte').addEventListener('change', e=>{
+  poblarSelectAtletas('evo-atleta', e.target.value);
+  document.getElementById('evo-atleta').dispatchEvent(new Event('change'));
+});
+
+document.getElementById('evo-atleta').addEventListener('change', async e=>{
+  sincronizarSelectores('evo', e.target.value);
+  await renderEvolutivo(e.target.value);
+  if(e.target.value) cargarYRenderInforme(e.target.value); // mantiene Informes al día aunque no se esté viendo
+});
 
 const EVO_CHARTS = [
   {key:'peso', label:'Peso corporal (kg)', color:'#0d9488'},
