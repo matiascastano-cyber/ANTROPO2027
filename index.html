@@ -355,11 +355,195 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// ===================== DATOS EN MEMORIA =====================
+// ===================== CONEXIÓN A SUPABASE =====================
+const SUPABASE_URL = 'https://rhzjmkvnayrwypzqmkhp.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_cwW8G--lEDzfVokvWvWOOA_AAG1Rb-a';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Traduce entre el código interno de la web ("pliegues.tricipital") y el
+// codigo real de tipos_medicion en la base ("PLI_TRICIPITAL").
+const MAPA_MEDICIONES = {
+  'basicas.peso_kg': 'PESO',
+  'basicas.talla_cm': 'TALLA',
+  'basicas.talla_sentada_cm': 'TALLA_SENTADA',
+  'basicas.envergadura_cm': 'ENVERGADURA',
+  'pliegues.tricipital': 'PLI_TRICIPITAL',
+  'pliegues.subescapular': 'PLI_SUBESCAPULAR',
+  'pliegues.bicipital': 'PLI_BICIPITAL',
+  'pliegues.pectoral': 'PLI_PECTORAL',
+  'pliegues.axilar_medio': 'PLI_AXILAR_MEDIO',
+  'pliegues.iliocrestal': 'PLI_ILIOCRESTAL',
+  'pliegues.supraespinal': 'PLI_SUPRAESPINAL',
+  'pliegues.abdominal': 'PLI_ABDOMINAL',
+  'pliegues.muslo_anterior': 'PLI_MUSLO_ANTERIOR',
+  'pliegues.pierna_medial': 'PLI_PIERNA_MEDIAL',
+  'perimetros.cefalico': 'PER_CEFALICO',
+  'perimetros.cuello': 'PER_CUELLO',
+  'perimetros.toracico': 'PER_TORACICO',
+  'perimetros.cintura': 'PER_CINTURA',
+  'perimetros.umbilical': 'PER_UMBILICAL',
+  'perimetros.gluteo': 'PER_GLUTEO',
+  'perimetros.muslo_1': 'PER_MUSLO_1',
+  'perimetros.muslo_medial': 'PER_MUSLO_MEDIAL',
+  'perimetros.pierna': 'PER_PIERNA',
+  'perimetros.tobillo': 'PER_TOBILLO',
+  'perimetros.brazo_relajado': 'PER_BRAZO_RELAJADO',
+  'perimetros.brazo_contraido': 'PER_BRAZO_CONTRAIDO',
+  'perimetros.antebrazo': 'PER_ANTEBRAZO',
+  'perimetros.muneca': 'PER_MUNECA',
+  'diametros.biacromial': 'DIA_BIACROMIAL',
+  'diametros.transv_torax': 'DIA_TRANSV_TORAX',
+  'diametros.a_p_torax': 'DIA_AP_TORAX',
+  'diametros.biliocrestal': 'DIA_BILIOCRESTAL',
+  'diametros.bicond_femur': 'DIA_BICOND_FEMUR',
+  'diametros.biep_humero': 'DIA_BIEP_HUMERO',
+  'diametros.biestiloideo': 'DIA_BIESTILOIDEO',
+  'diametros.bimaleolar': 'DIA_BIMALEOLAR',
+  'diametros.pie_longitudinal': 'DIA_PIE_LONGITUDINAL',
+  'diametros.pie_transversal': 'DIA_PIE_TRANSVERSAL',
+  'diametros.mano_transversal': 'DIA_MANO_TRANSVERSAL',
+  'diametros.bideltoideo': 'DIA_BIDELTOIDEO',
+  'diametros.bitrocanterico': 'DIA_BITROCANTERICO',
+  'alturas.acromial': 'ALT_ACROMIAL',
+  'alturas.radial': 'ALT_RADIAL',
+  'alturas.estiloidea': 'ALT_ESTILOIDEA',
+  'alturas.dactiloidea': 'ALT_DACTILOIDEA',
+  'alturas.ilioespinal': 'ALT_ILIOESPINAL',
+  'alturas.trocanterica': 'ALT_TROCANTERICA',
+  'alturas.tibial_lateral': 'ALT_TIBIAL_LATERAL',
+  'alturas.maleolar_lateral': 'ALT_MALEOLAR_LATERAL',
+  'alturas.maleolar_medial': 'ALT_MALEOLAR_MEDIAL',
+  'longitudes.acrom_dactiloidea': 'LON_ACROM_DACTILOIDEA',
+  'longitudes.acrom_estiloidea': 'LON_ACROM_ESTILOIDEA',
+  'longitudes.acrom_radial': 'LON_ACROM_RADIAL',
+  'longitudes.radial_estiloidea': 'LON_RADIAL_ESTILOIDEA',
+  'longitudes.medioestil_dactil': 'LON_MEDIOESTIL_DACTIL',
+  'longitudes.talla_talla_sentada': 'LON_TALLA_TALLA_SENTADA',
+  'longitudes.talla_t_s_tibial_lat': 'LON_TALLA_TS_TIBIAL_LAT',
+  'longitudes.trocant_tibial_lat': 'LON_TROCANT_TIBIAL_LAT',
+  'longitudes.tib_med_mal_med': 'LON_TIB_MED_MAL_MED',
+  'generales.handgrip_derecho': 'HG_DERECHO',
+  'generales.handgrip_izquierdo': 'HG_IZQUIERDO',
+};
+const MAPA_MEDICIONES_INV = Object.fromEntries(Object.entries(MAPA_MEDICIONES).map(([k,v])=>[v,k]));
+
+let TIPOS_MEDICION_CACHE = null; // codigo -> uuid, se carga una vez al iniciar
+
+async function cargarTiposMedicion(){
+  if(TIPOS_MEDICION_CACHE) return TIPOS_MEDICION_CACHE;
+  const { data, error } = await sb.from('tipos_medicion').select('id, codigo');
+  if(error){ console.error('Error cargando tipos_medicion:', error); return {}; }
+  TIPOS_MEDICION_CACHE = Object.fromEntries(data.map(t=>[t.codigo, t.id]));
+  return TIPOS_MEDICION_CACHE;
+}
+// ===================== DATOS EN MEMORIA (ahora como caché de lo que hay en Supabase) =====================
 let atletas = [];
 let evaluaciones = [];
 let atletaSeleccionadoId = null;
+
+// --- Atletas ---
+async function cargarAtletas(){
+  const { data, error } = await sb.from('atletas').select('*').order('apellido');
+  if(error){ console.error('Error cargando atletas:', error); showToast('Error cargando deportistas'); return; }
+  atletas = data.map(a => ({
+    id: a.id, nombre: a.nombre, apellido: a.apellido, documento: a.documento,
+    deporte: null, deporte_id: a.deporte_id, sexo: a.sexo, fnac: a.fecha_nacimiento,
+    lateralidad: a.lateralidad
+  }));
+  // resolver nombre del deporte (join simple del lado del cliente)
+  const { data: deportesData } = await sb.from('deportes').select('id, nombre');
+  const deportesMap = Object.fromEntries((deportesData||[]).map(d=>[d.id, d.nombre]));
+  atletas.forEach(a => { a.deporte = deportesMap[a.deporte_id] || '—'; });
+}
+
+async function guardarAtletaEnSupabase(atleta){
+  let deporteId = null;
+  if(atleta.deporte){
+    const { data: existente } = await sb.from('deportes').select('id').eq('nombre', atleta.deporte).maybeSingle();
+    if(existente) deporteId = existente.id;
+    else {
+      const { data: nuevo, error: errD } = await sb.from('deportes').insert({ nombre: atleta.deporte }).select('id').single();
+      if(errD){ console.error(errD); } else { deporteId = nuevo.id; }
+    }
+  }
+  const { data, error } = await sb.from('atletas').insert({
+    nombre: atleta.nombre, apellido: atleta.apellido, documento: atleta.documento || null,
+    fecha_nacimiento: atleta.fnac || null, sexo: atleta.sexo, lateralidad: atleta.lateralidad,
+    deporte_id: deporteId
+  }).select().single();
+  if(error){ console.error('Error guardando atleta:', error); showToast('Error guardando deportista: ' + error.message); return null; }
+  return { ...data, deporte: atleta.deporte };
+}
+
+// --- Evaluaciones + mediciones (reconstruye el mismo formato "sec.code": valor que ya usa toda la app) ---
+async function cargarEvaluacionesDeAtleta(atletaId){
+  const { data: evals, error } = await sb.from('evaluaciones')
+    .select('id, fecha_evaluacion')
+    .eq('atleta_id', atletaId)
+    .order('fecha_evaluacion');
+  if(error){ console.error('Error cargando evaluaciones:', error); return []; }
+  if(evals.length === 0) return [];
+
+  const tipos = await cargarTiposMedicion();
+  const idAcodigo = Object.fromEntries(Object.entries(tipos).map(([codigo,id])=>[id, codigo]));
+
+  const evalIds = evals.map(e=>e.id);
+  const { data: medicionesRows, error: errM } = await sb.from('mediciones')
+    .select('evaluacion_id, tipo_medicion_id, valor_final')
+    .in('evaluacion_id', evalIds);
+  if(errM) console.error('Error cargando mediciones:', errM);
+
+  const porEvaluacion = {};
+  (medicionesRows||[]).forEach(m=>{
+    const codigoDb = idAcodigo[m.tipo_medicion_id];
+    const appCode = MAPA_MEDICIONES_INV[codigoDb];
+    if(!appCode) return; // variable que no usamos en el formulario (ok, se ignora)
+    if(!porEvaluacion[m.evaluacion_id]) porEvaluacion[m.evaluacion_id] = {};
+    porEvaluacion[m.evaluacion_id][appCode] = m.valor_final;
+  });
+
+  const resultado = evals.map(e => ({
+    id: e.id, atletaId, fecha: e.fecha_evaluacion,
+    mediciones: porEvaluacion[e.id] || {}
+  }));
+
+  // reemplazar en la caché local las evaluaciones de este atleta
+  evaluaciones = evaluaciones.filter(ev => ev.atletaId !== atletaId).concat(resultado);
+  return resultado;
+}
+
+async function guardarEvaluacionEnSupabase(atletaId, mediciones){
+  const ladoEvaluado = mediciones['generales.lado_evaluado'] || null;
+  const antropometrista = mediciones['generales.antropometrista'] || null;
+
+  const { data: evalNueva, error } = await sb.from('evaluaciones')
+    .insert({ atleta_id: atletaId, lado_evaluado: ladoEvaluado })
+    .select('id, fecha_evaluacion').single();
+  if(error){ console.error('Error guardando evaluación:', error); showToast('Error guardando evaluación: ' + error.message); return null; }
+
+  if(antropometrista){
+    const { error: errInstr } = await sb.from('instrumental_evaluacion')
+      .insert({ evaluacion_id: evalNueva.id, antropometrista });
+    if(errInstr) console.error('Error guardando antropometrista:', errInstr);
+  }
+
+  const tipos = await cargarTiposMedicion();
+  const filas = [];
+  Object.entries(mediciones).forEach(([appCode, valor])=>{
+    if(valor === null || valor === undefined || valor === '') return;
+    const codigoDb = MAPA_MEDICIONES[appCode];
+    const tipoId = codigoDb ? tipos[codigoDb] : null;
+    if(!tipoId) return; // (ej: generales.antropometrista/lado_evaluado, que no son mediciones numéricas)
+    filas.push({ evaluacion_id: evalNueva.id, tipo_medicion_id: tipoId, medida_1: valor, valor_final: valor });
+  });
+  if(filas.length){
+    const { error: errIns } = await sb.from('mediciones').insert(filas);
+    if(errIns) console.error('Error guardando mediciones:', errIns);
+  }
+  return { id: evalNueva.id, atletaId, fecha: evalNueva.fecha_evaluacion, mediciones };
+}
 let tabActual = 0;
 
 // ===================== DEFINICIÓN DE SOLAPAS Y VARIABLES =====================
@@ -442,12 +626,13 @@ function renderAtletas(){
   }
 }
 
-document.getElementById('btn-guardar-atleta').addEventListener('click', ()=>{
+document.getElementById('btn-guardar-atleta').addEventListener('click', async ()=>{
   const nombre = document.getElementById('f-nombre').value.trim();
   const apellido = document.getElementById('f-apellido').value.trim();
   if(!nombre || !apellido){ showToast('Nombre y apellido son obligatorios'); return; }
-  atletas.push({
-    id: 'a'+Date.now(),
+  const btn = document.getElementById('btn-guardar-atleta');
+  btn.textContent = 'Guardando...'; btn.style.opacity = '0.6';
+  const nuevo = await guardarAtletaEnSupabase({
     nombre, apellido,
     documento: document.getElementById('f-documento').value.trim(),
     deporte: document.getElementById('f-deporte').value,
@@ -455,6 +640,9 @@ document.getElementById('btn-guardar-atleta').addEventListener('click', ()=>{
     fnac: document.getElementById('f-fnac').value,
     lateralidad: document.getElementById('f-lateralidad').value
   });
+  btn.textContent = 'Guardar deportista'; btn.style.opacity = '1';
+  if(!nuevo) return; // el error ya se mostró en guardarAtletaEnSupabase
+  atletas.push(nuevo);
   ['f-nombre','f-apellido','f-documento','f-fnac'].forEach(id=>document.getElementById(id).value='');
   renderAtletas();
   showToast(`${nombre} ${apellido} guardado/a correctamente`);
@@ -559,7 +747,7 @@ function seleccionarAtleta(id){
 }
 document.getElementById('eval-atleta').addEventListener('change', e=>seleccionarAtleta(e.target.value));
 
-document.getElementById('btn-guardar-evaluacion').addEventListener('click', ()=>{
+document.getElementById('btn-guardar-evaluacion').addEventListener('click', async ()=>{
   if(!atletaSeleccionadoId){ showToast('Elegí un deportista antes de guardar'); return; }
   const pesoInput = document.querySelector('#panel-basicas input[data-code="peso_kg_"]') || [...document.querySelectorAll('#panel-basicas input')][0];
   const tallaInput = [...document.querySelectorAll('#panel-basicas input')][1];
@@ -573,7 +761,14 @@ document.getElementById('btn-guardar-evaluacion').addEventListener('click', ()=>
     }
     mediciones[`${inp.dataset.sec}.${inp.dataset.code}`] = inp.value.trim() === '' ? null : inp.value.trim();
   });
-  evaluaciones.push({ id:'e'+Date.now(), atletaId: atletaSeleccionadoId, fecha: new Date().toISOString(), mediciones });
+
+  const btn = document.getElementById('btn-guardar-evaluacion');
+  btn.textContent = 'Guardando...'; btn.style.opacity = '0.6';
+  const nueva = await guardarEvaluacionEnSupabase(atletaSeleccionadoId, mediciones);
+  btn.textContent = 'Guardar evaluación'; btn.style.opacity = '1';
+  if(!nueva) return;
+
+  evaluaciones.push(nueva);
   renderAtletas();
   if(document.getElementById('inf-atleta').value === atletaSeleccionadoId) document.getElementById('inf-atleta').dispatchEvent(new Event('change'));
   if(document.getElementById('evo-atleta').value === atletaSeleccionadoId) renderEvolutivo(atletaSeleccionadoId);
@@ -660,8 +855,11 @@ function renderInformesSelectores(){
   poblarSelectAtletas('inf-atleta');
 }
 
-document.getElementById('inf-atleta').addEventListener('change', e=>{
+document.getElementById('inf-atleta').addEventListener('change', async e=>{
   const evalSel = document.getElementById('inf-evaluacion');
+  if(!e.target.value){ evalSel.innerHTML = '<option value="">— Elegí un deportista primero —</option>'; evalSel.disabled = true; document.getElementById('inf-contenido').innerHTML=''; return; }
+  evalSel.innerHTML = '<option>Cargando...</option>'; evalSel.disabled = true;
+  await cargarEvaluacionesDeAtleta(e.target.value);
   const evs = evaluaciones.filter(ev=>ev.atletaId===e.target.value).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   evalSel.innerHTML = '';
   document.getElementById('inf-contenido').innerHTML = '';
@@ -1025,9 +1223,12 @@ function construirEvolutivoHTML(atletaId){
   return html;
 }
 
-function renderEvolutivo(atletaId){
+async function renderEvolutivo(atletaId){
   const cont = document.getElementById('evo-contenido');
-  cont.innerHTML = atletaId ? construirEvolutivoHTML(atletaId) : '';
+  if(!atletaId){ cont.innerHTML = ''; return; }
+  cont.innerHTML = `<div class="card"><div class="evo-empty">Cargando evaluaciones...</div></div>`;
+  await cargarEvaluacionesDeAtleta(atletaId);
+  cont.innerHTML = construirEvolutivoHTML(atletaId);
 }
 
 function svgLineChart(valores, fechas, color){
@@ -1058,54 +1259,34 @@ const BD_VARS = [
   {key:'peso', label:'Peso (kg)'},
   {key:'talla', label:'Talla (cm)'},
   {key:'envergadura', label:'Envergadura (cm)'},
-  {key:'grasa4c', label:'% Masa Grasa (4C — De Rose y Guimarães)'},
-  {key:'muscular4c', label:'% Masa Muscular (4C — De Rose y Guimarães)'},
-  {key:'grasa5c', label:'% Masa Grasa (5C — Kerr)'},
-  {key:'muscular5c', label:'% Masa Muscular (5C — Kerr)'}
+  {key:'grasa4c_kg', label:'Masa Grasa (4C — De Rose y Guimarães, kg)'},
+  {key:'muscular4c_kg', label:'Masa Muscular (4C — De Rose y Guimarães, kg)'},
+  {key:'grasa5c_kg', label:'Masa Grasa (5C — Kerr, kg)'},
+  {key:'muscular5c_kg', label:'Masa Muscular (5C — Kerr, kg)'}
 ];
-const BD_DEPORTES = ['Pentathlón','Fútbol','Handball','Natación','Atletismo','Rugby'];
-const BD_COLORES = {'Pentathlón':'#0d9488','Fútbol':'#d6437a','Handball':'#c47f17','Natación':'#2b6cb0','Atletismo':'#3f9142','Rugby':'#7c4dff'};
-const BD_ANIOS = [2023,2024,2025];
+const BD_PALETA = ['#0d9488','#d6437a','#c47f17','#2b6cb0','#3f9142','#7c4dff','#e08a2b','#5fa662','#c2557a','#4d7ea8','#a1662f','#8a5fd6'];
+let BD_DATA = [];
+let BD_DEPORTES = [];
+let BD_ANIOS = [];
+let BD_COLORES = {};
 
-function mulberry32(seed){
-  return function(){
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
+// Trae TODA la vista_bigdata paginando de a 1000 filas (límite por defecto de Supabase).
+async function cargarBigData(){
+  let todos = [];
+  let desde = 0;
+  const TAM_PAGINA = 1000;
+  while(true){
+    const { data, error } = await sb.from('vista_bigdata').select('*').range(desde, desde + TAM_PAGINA - 1);
+    if(error){ console.error('Error cargando Big Data:', error); break; }
+    todos = todos.concat(data);
+    if(data.length < TAM_PAGINA) break;
+    desde += TAM_PAGINA;
+  }
+  BD_DATA = todos;
+  BD_DEPORTES = [...new Set(todos.map(d=>d.deporte))].sort();
+  BD_ANIOS = [...new Set(todos.map(d=>d.anio).filter(a=>a))].sort();
+  BD_COLORES = Object.fromEntries(BD_DEPORTES.map((d,i)=>[d, BD_PALETA[i % BD_PALETA.length]]));
 }
-
-function generarBigData(){
-  const rnd = mulberry32(20260731);
-  const data = [];
-  BD_DEPORTES.forEach(deporte=>{
-    BD_ANIOS.forEach(anio=>{
-      const n = 4 + Math.floor(rnd()*4); // 4 a 7 atletas por deporte/año
-      for(let i=0;i<n;i++){
-        const talla = 160 + rnd()*35;
-        const envergadura = talla + (rnd()*10-3);
-        const pesoBase = (talla-100) + rnd()*15 - 5;
-        const grasa4c = 8 + rnd()*20;
-        const muscular4c = 36 + rnd()*16 - (grasa4c-15)*0.3;
-        const grasa5c = grasa4c + (rnd()*6-3);
-        const muscular5c = muscular4c + (rnd()*5-2.5);
-        data.push({
-          deporte, anio,
-          peso: +pesoBase.toFixed(1),
-          talla: +talla.toFixed(1),
-          envergadura: +envergadura.toFixed(1),
-          grasa4c: +grasa4c.toFixed(1),
-          muscular4c: +muscular4c.toFixed(1),
-          grasa5c: +grasa5c.toFixed(1),
-          muscular5c: +muscular5c.toFixed(1)
-        });
-      }
-    });
-  });
-  return data;
-}
-const BD_DATA = generarBigData();
 
 // Usada por los botones "Imprimir / PDF" de cada hoja individual (4C / 5C).
 // Necesaria porque el CSS de impresión oculta todo salvo #print-area:
@@ -1141,7 +1322,10 @@ document.getElementById('btn-imprimir-todo').addEventListener('click', ()=>{
   window.print();
 });
 
-function initBigData(){
+async function initBigData(){
+  document.getElementById('bd-chart').innerHTML = '<div class="evo-empty">Cargando datos de todos los deportistas...</div>';
+  await cargarBigData();
+
   const selAnio = document.getElementById('bd-anio');
   selAnio.innerHTML = '<option value="">Todos los años</option>' + BD_ANIOS.map(a=>`<option value="${a}">${a}</option>`).join('');
 
@@ -1152,7 +1336,7 @@ function initBigData(){
   const selY = document.getElementById('bd-y');
   const opts = BD_VARS.map(v=>`<option value="${v.key}">${v.label}</option>`).join('');
   selX.innerHTML = opts; selY.innerHTML = opts;
-  selX.value = 'peso'; selY.value = 'grasa4c';
+  selX.value = 'peso'; selY.value = 'grasa4c_kg';
 
   [selAnio, selDeporte, selX, selY].forEach(el=>el.addEventListener('change', renderBigData));
   renderBigData();
@@ -1166,11 +1350,11 @@ function renderBigData(){
   const xLabel = BD_VARS.find(v=>v.key===xKey).label;
   const yLabel = BD_VARS.find(v=>v.key===yKey).label;
 
-  let filtrado = BD_DATA;
+  let filtrado = BD_DATA.filter(d => d[xKey]!==null && d[xKey]!==undefined && d[yKey]!==null && d[yKey]!==undefined);
   if(anio) filtrado = filtrado.filter(d=>String(d.anio)===anio);
   if(deporte) filtrado = filtrado.filter(d=>d.deporte===deporte);
 
-  document.getElementById('bd-titulo').textContent = `${yLabel}  vs.  ${xLabel}  (${filtrado.length} deportistas)`;
+  document.getElementById('bd-titulo').textContent = `${yLabel}  vs.  ${xLabel}  (${filtrado.length} evaluaciones)`;
   document.getElementById('bd-chart').innerHTML = svgScatter(filtrado, xKey, yKey, xLabel, yLabel);
 
   const deportesPresentes = [...new Set(filtrado.map(d=>d.deporte))];
@@ -1214,20 +1398,17 @@ function svgScatter(data, xKey, yKey, xLabel, yLabel){
   </svg>`;
 }
 
-// ===================== INIT (datos de ejemplo) =====================
-atletas.push({id:'a1', nombre:'Belén', apellido:'Serrano', documento:'38.221.909', deporte:'Pentathlón', sexo:'F', fnac:'2003-04-25', lateralidad:'Diestro'});
-evaluaciones.push({
-  id:'e_demo1', atletaId:'a1', fecha:'2025-05-10T09:30:00',
-  mediciones:{'basicas.peso_kg':'67.40','basicas.talla_cm':'174.4','basicas.talla_sentada_cm':'91.2','pliegues.tricipital':'9.2','pliegues.subescapular':'4.6','pliegues.supraespinal':'6.9','pliegues.abdominal':'13.1','pliegues.muslo_anterior':'8.4','pliegues.pierna_medial':'5.2','diametros.biestiloideo':'5.6','diametros.bicond_femur':'9.1','diametros.biep_humero':'6.6','perimetros.brazo_contraido':'29.8','perimetros.pierna':'34.9','generales.antropometrista':'Cardey','generales.lado_evaluado':'Derecho','generales.handgrip_derecho':'34.2','generales.handgrip_izquierdo':'31.8'}
-});
-evaluaciones.push({
-  id:'e_demo2', atletaId:'a1', fecha:'2025-11-28T09:38:00',
-  mediciones:{'basicas.peso_kg':'64.90','basicas.talla_cm':'174.4','basicas.talla_sentada_cm':'89.5','pliegues.tricipital':'7.6','pliegues.subescapular':'3.4','pliegues.supraespinal':'5.8','pliegues.abdominal':'11.4','pliegues.muslo_anterior':'7.2','pliegues.pierna_medial':'4.8','diametros.biestiloideo':'5.7','diametros.bicond_femur':'9.0','diametros.biep_humero':'6.7','perimetros.brazo_contraido':'30.5','perimetros.pierna':'35.4','generales.antropometrista':'Cardey','generales.lado_evaluado':'Derecho','generales.handgrip_derecho':'36.5','generales.handgrip_izquierdo':'32.9'}
-});
-renderAtletas();
-renderInformesSelectores();
-renderEvolutivoSelector();
-initBigData();
+// ===================== INIT (carga real desde Supabase) =====================
+async function iniciarApp(){
+  document.querySelector('#tabla-atletas').closest('.card').querySelector('h2').textContent = 'Deportistas registrados (cargando...)';
+  await cargarAtletas();
+  document.querySelector('#tabla-atletas').closest('.card').querySelector('h2').textContent = 'Deportistas registrados';
+  renderAtletas();
+  renderInformesSelectores();
+  renderEvolutivoSelector();
+  initBigData(); // esta arranca su propia carga (paginada) para el scatter
+}
+iniciarApp();
 </script>
 </body>
 </html>
