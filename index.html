@@ -247,8 +247,16 @@
 
       <div class="card">
         <h2>Deportistas registrados</h2>
+        <div class="field-grid" style="grid-template-columns:repeat(5,1fr); margin-bottom:16px;">
+          <div class="field"><label>Nombre</label><input type="text" id="filtro-nombre" placeholder="Buscar..."></div>
+          <div class="field"><label>Deporte</label><input type="text" id="filtro-deporte" list="lista-deportes" placeholder="Todos"></div>
+          <div class="field"><label>Sexo</label><select id="filtro-sexo"><option value="">Todos</option><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
+          <div class="field"><label>Lateralidad</label><select id="filtro-lateralidad"><option value="">Todas</option><option value="Diestro">Diestro</option><option value="Zurdo">Zurdo</option><option value="Ambidiestro">Ambidiestro</option></select></div>
+          <div class="field"><label>Documento</label><input type="text" id="filtro-documento" placeholder="Buscar..."></div>
+        </div>
+        <div id="filtro-contador" style="font-size:12.5px; color:var(--mist); margin-bottom:10px;"></div>
         <table class="list" id="tabla-atletas">
-          <thead><tr><th>Nombre</th><th>Deporte</th><th>Sexo</th><th>Lateralidad</th><th>Documento</th><th>Evaluaciones</th><th></th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Deporte</th><th>Sexo</th><th>Lateralidad</th><th>Documento</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="empty" id="atletas-empty">Todavía no cargaste ningún deportista.</div>
@@ -453,6 +461,18 @@ async function cargarTiposMedicion(){
 }
 // ===================== DATOS EN MEMORIA (ahora como caché de lo que hay en Supabase) =====================
 let atletas = [];
+
+// Algunos nombres del CSV original ya venían como "Apellido, Nombre" (con coma
+// incluida en el campo). Al separar apellido/nombre por espacio, esa coma quedó
+// pegada al apellido, y al armar "Apellido, Nombre" para mostrar quedaba
+// duplicada ("Apellido,, Nombre"). Esto lo limpia solo en la visualización,
+// sin tocar los datos guardados.
+function apellidoLimpio(apellido){
+  return (apellido || '').replace(/,\s*$/, '').trim();
+}
+function nombreCompleto(a){
+  return `${apellidoLimpio(a.apellido)}, ${a.nombre}`;
+}
 let evaluaciones = [];
 let atletaSeleccionadoId = null;
 
@@ -667,26 +687,45 @@ document.querySelectorAll('.nav-btn').forEach(btn=>{
 });
 
 // ===================== ALTA DE ATLETAS =====================
-function renderAtletas(){
+const LIMITE_TABLA_ATLETAS = 200;
+
+function atletasFiltrados(){
+  const nombre = (document.getElementById('filtro-nombre').value || '').trim().toLowerCase();
+  const deporte = (document.getElementById('filtro-deporte').value || '').trim().toLowerCase();
+  const sexo = document.getElementById('filtro-sexo').value;
+  const lateralidad = document.getElementById('filtro-lateralidad').value;
+  const documento = (document.getElementById('filtro-documento').value || '').trim().toLowerCase();
+
+  return atletas.filter(a=>{
+    if(nombre && !nombreCompleto(a).toLowerCase().includes(nombre)) return false;
+    if(deporte && !(a.deporte||'').toLowerCase().includes(deporte)) return false;
+    if(sexo && a.sexo!==sexo) return false;
+    if(lateralidad && a.lateralidad!==lateralidad) return false;
+    if(documento && !(a.documento||'').toLowerCase().includes(documento)) return false;
+    return true;
+  });
+}
+
+function renderTablaAtletas(){
   const tbody = document.querySelector('#tabla-atletas tbody');
   const empty = document.getElementById('atletas-empty');
+  const contador = document.getElementById('filtro-contador');
   tbody.innerHTML = '';
-  const select = document.getElementById('eval-atleta');
-  select.innerHTML = '<option value="">— Seleccioná un deportista —</option>';
 
-  if(atletas.length === 0){ empty.style.display='block'; document.getElementById('tabla-atletas').style.display='none'; }
-  else { empty.style.display='none'; document.getElementById('tabla-atletas').style.display='table'; }
+  if(atletas.length === 0){ empty.style.display='block'; document.getElementById('tabla-atletas').style.display='none'; contador.textContent=''; return; }
+  empty.style.display='none'; document.getElementById('tabla-atletas').style.display='table';
 
-  atletas.forEach(a=>{
-    const cantEval = evaluaciones.filter(e=>e.atletaId===a.id).length;
+  const filtrados = atletasFiltrados();
+  const visibles = filtrados.slice(0, LIMITE_TABLA_ATLETAS);
+  contador.textContent = filtrados.length > LIMITE_TABLA_ATLETAS
+    ? `Mostrando ${LIMITE_TABLA_ATLETAS} de ${filtrados.length} resultados — afiná el filtro para ver más.`
+    : `${filtrados.length} deportista${filtrados.length===1?'':'s'} encontrado${filtrados.length===1?'':'s'}.`;
+
+  visibles.forEach(a=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><b>${a.apellido}, ${a.nombre}</b></td><td>${a.deporte}</td><td>${a.sexo==='F'?'Femenino':'Masculino'}</td><td>${a.lateralidad||'—'}</td><td>${a.documento||'—'}</td>
-      <td><span class="chip">${cantEval} evaluación${cantEval===1?'':'es'}</span></td>
+    tr.innerHTML = `<td><b>${nombreCompleto(a)}</b></td><td>${a.deporte}</td><td>${a.sexo==='F'?'Femenino':'Masculino'}</td><td>${a.lateralidad||'—'}</td><td>${a.documento||'—'}</td>
       <td style="white-space:nowrap;"><button class="link-btn" data-id="${a.id}">Cargar evaluación →</button> · <button class="link-btn" data-edit-id="${a.id}">Editar</button></td>`;
     tbody.appendChild(tr);
-    const opt = document.createElement('option');
-    opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre} — ${a.deporte}`;
-    select.appendChild(opt);
   });
 
   tbody.querySelectorAll('.link-btn[data-id]').forEach(b=>{
@@ -699,6 +738,25 @@ function renderAtletas(){
   tbody.querySelectorAll('.link-btn[data-edit-id]').forEach(b=>{
     b.addEventListener('click', ()=>cargarAtletaParaEditar(b.dataset.editId));
   });
+}
+
+['filtro-nombre','filtro-deporte','filtro-documento'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTablaAtletas);
+});
+['filtro-sexo','filtro-lateralidad'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', renderTablaAtletas);
+});
+
+function renderAtletas(){
+  const select = document.getElementById('eval-atleta');
+  select.innerHTML = '<option value="">— Seleccioná un deportista —</option>';
+  atletas.forEach(a=>{
+    const opt = document.createElement('option');
+    opt.value = a.id; opt.textContent = `${nombreCompleto(a)} — ${a.deporte}`;
+    select.appendChild(opt);
+  });
+
+  renderTablaAtletas();
 
   if(typeof poblarSelectAtletas === 'function'){
     poblarSelectAtletas('inf-atleta', document.getElementById('inf-deporte') ? document.getElementById('inf-deporte').value : '');
@@ -732,7 +790,7 @@ function cargarAtletaParaEditar(atletaId){
   document.getElementById('f-sexo').value = a.sexo || 'F';
   document.getElementById('f-fnac').value = a.fnac || '';
   document.getElementById('f-lateralidad').value = a.lateralidad || 'Diestro';
-  document.getElementById('titulo-form-atleta').textContent = `Editando: ${a.apellido}, ${a.nombre}`;
+  document.getElementById('titulo-form-atleta').textContent = `Editando: ${nombreCompleto(a)}`;
   document.getElementById('btn-guardar-atleta').textContent = 'Actualizar deportista';
   document.getElementById('btn-cancelar-edicion-atleta').style.display = 'inline-block';
   document.querySelector('[data-view="view-atletas"]').click();
@@ -1050,7 +1108,7 @@ function poblarSelectAtletas(selectId, deporteFiltro){
   const lista = deporteFiltro ? atletas.filter(a=>a.deporte===deporteFiltro) : atletas;
   lista.forEach(a=>{
     const opt = document.createElement('option');
-    opt.value = a.id; opt.textContent = `${a.apellido}, ${a.nombre}`;
+    opt.value = a.id; opt.textContent = nombreCompleto(a);
     sel.appendChild(opt);
   });
   if(actual && lista.some(a=>a.id===actual)) sel.value = actual;
@@ -1339,7 +1397,7 @@ function renderInforme(evalId, atletaId){
 
 function hojaHeader(atleta, ev, r){
   return `<table class="hoja-header">
-    <tr><td>Apellido y Nombre: <b>${atleta.apellido.toUpperCase()} ${atleta.nombre.toUpperCase()}</b></td>
+    <tr><td>Apellido y Nombre: <b>${apellidoLimpio(atleta.apellido).toUpperCase()} ${atleta.nombre.toUpperCase()}</b></td>
         <td>Sexo: <b>${atleta.sexo==='F'?'FEMENINO':'MASCULINO'}</b></td>
         <td>Fecha de Observación: <b>${new Date(ev.fecha).toLocaleDateString('es-AR')}</b></td></tr>
     <tr><td>Actividad Física: <b>${atleta.deporte.toUpperCase()}</b></td>
@@ -1723,7 +1781,7 @@ function renderBigData(){
   if(edadHasta) filtrado = filtrado.filter(d=>d.edad!==null && d.edad!==undefined && d.edad<=Number(edadHasta));
   filtrado = filtrado.map(d=>{
     const a = atletasPorId[d.atleta_id];
-    return { ...d, apellido: a ? `${a.apellido}, ${a.nombre}` : 'Deportista desconocido' };
+    return { ...d, apellido: a ? nombreCompleto(a) : 'Deportista desconocido' };
   });
 
   document.getElementById('bd-titulo').textContent = `${yLabel}  vs.  ${xLabel}  (${filtrado.length} evaluaciones)`;
